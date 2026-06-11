@@ -93,7 +93,7 @@ Principios:
 | PNG | `png` 0.18 (Rust puro) | `png` + optimización `oxipng` 10.x; lossy: cuantización con `quantette` 0.6 | MIT/Apache |
 | JPEG | `zune-jpeg` (Rust puro, velocidad clase libjpeg-turbo) | `mozjpeg` crate (C estático; trellis + progressive — referencia de calidad) | MIT/Apache/Zlib + IJG/BSD |
 | WebP | `image-webp` 0.2 (Rust puro, decodifica todo el formato) | `libwebp` vía **`libwebp-sys2` directo** (el wrapper `webp` está poco mantenido — verificado) | MIT/Apache + BSD-3 |
-| AVIF | `rav1d` 1.1 (Rust puro; ~5% más lento que dav1d single-thread, compila a WASM) | `ravif` 0.13 (Rust puro, sobre rav1e) | BSD-2/BSD-3 |
+| AVIF | `avif-decode` 1.0 (envuelve aom-decode/libaom; verificado en docs.rs) | `ravif` 0.13 (Rust puro, sobre rav1e) | BSD-2/BSD-3 |
 
 Notas obligatorias de la verificación:
 
@@ -102,9 +102,9 @@ Notas obligatorias de la verificación:
 - **rav1e está dormido upstream** (último commit dic 2025) pero es estable y completo; densidad apenas detrás de libaom. Mitigación: la interfaz de códecs permite un backend `libaom`/`SVT-AV1` opcional en v2.
 - **Evitar `libavif-rs`** (sin mantenimiento desde jul 2024); el contenedor AVIF se arma con `avif-serialize`/`avif-parse`.
 
-**Decisión AVIF decode (resuelta por el requisito de playground WASM)**: se prefiere `rav1d` (Rust puro) sobre `dav1d` (C): elimina meson de la matriz de builds y compila a wasm32 sin toolchain extra, a costa de ~5% de velocidad single-thread. Contingencia: si la API del crate `rav1d` resulta inutilizable directamente (es un port orientado a C-API), se usa `dav1d` en targets nativos y `rav1d` solo en WASM.
+**Decisión AVIF decode (resuelta, verificada contra docs.rs en el plan M1)**: `avif-decode` (kornelski, BSD-3) — API de alto nivel "bytes AVIF → píxeles" que envuelve **aom-decode/libaom**, no dav1d como se asumió inicialmente. Ventaja decisiva: reutiliza el toolchain cmake+nasm que ya exigen mozjpeg/libwebp (no suma meson), y libaom compila a WASM vía emscripten (precedente: el AVIF de Squoosh usaba exactamente libaom). `rav1d` quedó descartado para v1: es un port orientado a C-API sin API Rust de librería usable.
 
-**Códecs por target**: en los targets nativos la matriz aplica completa. En wasm32 (playground), los dos códecs C (`mozjpeg`, `libwebp`) se compilan con **emscripten** — precedente directo: Squoosh distribuyó exactamente esos códecs como WASM durante años. El resto de la matriz es Rust puro y compila a wasm32 sin toolchain adicional. Fallbacks feature-gated si un códec C resistiera el build WASM: `jpeg-encoder` (JPEG, menor densidad) y WebP lossless-only — documentados como degradación, no silenciosos.
+**Códecs por target**: en los targets nativos la matriz aplica completa. En wasm32 (playground), los tres códecs C (`mozjpeg`, `libwebp`, `libaom`) se compilan con **emscripten** — precedente directo: Squoosh distribuyó exactamente esos códecs como WASM durante años. El resto de la matriz es Rust puro y compila a wasm32 sin toolchain adicional. Fallbacks feature-gated si un códec C resistiera el build WASM: `jpeg-encoder` (JPEG, menor densidad) y WebP lossless-only — documentados como degradación, no silenciosos.
 
 ## 6. API
 
@@ -121,7 +121,7 @@ Dos operaciones, mismos nombres, mismas opciones y misma semántica en los tres 
 | `quality` | 1–100 | 75 | Tabla de mapeo estática y documentada por códec (calibrada una vez con SSIM sobre los vectores de prueba) para que el mismo número dé calidad visual comparable entre formatos; auto-ajuste perceptual queda para v2 |
 | `effort` | 0–9 | 4 | CPU invertido en reducir bytes (nivel oxipng / effort libwebp / speed rav1e invertido) |
 | `lossless` | bool | false | Fuerza camino sin pérdida (PNG siempre; WebP/AVIF soportan; JPEG lo rechaza con error) |
-| `keepMetadata` | bool | false | Por defecto se elimina EXIF/XMP. El perfil ICC **se respeta siempre** (se aplica o se preserva) para no romper colores |
+| `keepMetadata` | — | — | **Diferido a v2** (verificado: png 0.18 no escribe iCCP y ravif no embebe ICC). En v1: EXIF/XMP siempre se elimina, y el ICC **se aplica** convirtiendo los píxeles a sRGB al decodificar — los colores nunca se rompen y todo output es sRGB |
 | Por formato | namespace | — | `jpeg.progressive`, `jpeg.chromaSubsampling`, `png.interlace`, `avif.chromaSubsampling`, `webp.alphaQuality`, etc. |
 
 ### Resultado
@@ -217,4 +217,4 @@ SPA estática donde se arrastran imágenes y se comprimen **enteramente en el na
 
 ## 12. Ideas para v2+ (explícitamente fuera de v1)
 
-- Resize/variantes responsive; CLI fina sobre el core; publicar el build WASM como paquete npm (`@minipix/wasm`) para browser/edge runtimes (el build ya existe por el playground — falta empaquetado, docs y API pública estable); JPEG XL y GIF; modo "target size" / calidad perceptual automática (butteraugli/SSIMULACRA); backend AVIF de alta densidad (libaom/SVT-AV1) como feature opcional; PWA/offline para el playground.
+- Resize/variantes responsive; CLI fina sobre el core; publicar el build WASM como paquete npm (`@minipix/wasm`) para browser/edge runtimes (el build ya existe por el playground — falta empaquetado, docs y API pública estable); `keepMetadata` (preservación de EXIF/XMP/ICC — requiere escritura de iCCP/APP2/chunks por códec); JPEG XL y GIF; modo "target size" / calidad perceptual automática (butteraugli/SSIMULACRA); backend AVIF de alta densidad (libaom/SVT-AV1) como feature opcional; PWA/offline para el playground.
