@@ -8,6 +8,8 @@
 
 **minipix** es un SDK de compresión y conversión de imágenes para desarrolladores, con un único core en Rust publicado en tres registros: **npm** (Node.js/Bun, addon nativo vía napi-rs), **PyPI** (wheels nativos vía PyO3/maturin) y **crates.io** (el core directamente). Soporta **PNG, JPEG, WebP y AVIF** en v1, con dos operaciones (`compress` y `convert`), opciones unificadas entre lenguajes y árbol de dependencias 100% permisivo (MIT/Apache/BSD).
 
+El proyecto incluye además un **playground web** (como el de pixo/Squoosh): una SPA donde se arrastran imágenes y se comprimen **100% en el navegador** — el core compilado a WASM, la imagen nunca sale de la máquina del usuario.
+
 Promesa diferencial: **misma API, mismo motor y bytes de salida idénticos en los tres lenguajes** para una misma versión del core.
 
 Nombre verificado disponible en npm, PyPI y crates.io el 2026-06-11.
@@ -29,9 +31,15 @@ Investigación verificada contra fuentes primarias (junio 2026):
 | Códecs | Reusar los mejores existentes; no reimplementar |
 | Formatos v1 | PNG, JPEG, WebP, AVIF (decode + encode los cuatro) |
 | Alcance funcional v1 | `compress` (re-encode mismo formato) + `convert` (transcodificación) |
-| Runtimes v1 | Node.js/Bun nativo + CPython nativo (server-side) |
+| Runtimes v1 | Node.js/Bun nativo + CPython nativo (server-side) + browser vía WASM (solo playground) |
+| Frontend | Playground web 100% client-side (WASM), stack Vite + Svelte |
 | Licencias | Árbol completo MIT/Apache/BSD/IJG/zlib — sin GPL/LGPL/AGPL |
-| Fuera de alcance v1 | Browser/WASM, edge runtimes, resize, streaming, CLI, GIF/JPEG XL |
+| Fuera de alcance v1 | Edge runtimes, paquete npm WASM publicado, resize, streaming, CLI, GIF/JPEG XL |
+
+**Hitos de entrega**:
+
+1. **M1 — SDK**: core + bindings + publicación en npm/PyPI/crates.io.
+2. **M2 — Playground**: build WASM del core + SPA de compresión, desplegada como sitio estático.
 
 ## 4. Análisis de lenguajes (resumen)
 
@@ -49,7 +57,7 @@ Investigado por agentes con verificación adversarial de afirmaciones clave (12 
 
 Workspace de Cargo, tres crates, bindings sin lógica:
 
-```
+```text
 compressor/                  (repo)
 ├── crates/
 │   ├── core/                # minipix-core → crates.io
@@ -64,7 +72,9 @@ compressor/                  (repo)
 │   │   │       ├── webp.rs
 │   │   │       └── avif.rs
 │   ├── node/                # binding napi-rs → npm "minipix"
-│   └── python/              # binding PyO3 → PyPI "minipix" (maturin, abi3)
+│   ├── python/              # binding PyO3 → PyPI "minipix" (maturin, abi3)
+│   └── wasm/                # binding wasm-bindgen → playground (M2; no se publica en npm en v1)
+├── playground/              # SPA Vite + Svelte (M2) → hosting estático
 ├── tests/
 │   ├── vectors/             # imágenes de prueba compartidas
 │   └── conformance/         # suite de paridad cross-lenguaje
@@ -83,7 +93,7 @@ Principios:
 | PNG | `png` 0.18 (Rust puro) | `png` + optimización `oxipng` 10.x; lossy: cuantización con `quantette` 0.6 | MIT/Apache |
 | JPEG | `zune-jpeg` (Rust puro, velocidad clase libjpeg-turbo) | `mozjpeg` crate (C estático; trellis + progressive — referencia de calidad) | MIT/Apache/Zlib + IJG/BSD |
 | WebP | `image-webp` 0.2 (Rust puro, decodifica todo el formato) | `libwebp` vía **`libwebp-sys2` directo** (el wrapper `webp` está poco mantenido — verificado) | MIT/Apache + BSD-3 |
-| AVIF | `dav1d` crate 0.11 (binding C, el más rápido) | `ravif` 0.13 (Rust puro, sobre rav1e) | MIT + BSD-2/BSD-3 |
+| AVIF | `rav1d` 1.1 (Rust puro; ~5% más lento que dav1d single-thread, compila a WASM) | `ravif` 0.13 (Rust puro, sobre rav1e) | BSD-2/BSD-3 |
 
 Notas obligatorias de la verificación:
 
@@ -92,7 +102,9 @@ Notas obligatorias de la verificación:
 - **rav1e está dormido upstream** (último commit dic 2025) pero es estable y completo; densidad apenas detrás de libaom. Mitigación: la interfaz de códecs permite un backend `libaom`/`SVT-AV1` opcional en v2.
 - **Evitar `libavif-rs`** (sin mantenimiento desde jul 2024); el contenedor AVIF se arma con `avif-serialize`/`avif-parse`.
 
-**Decisión abierta (resolver en implementación)**: AVIF decode con `dav1d` (C, requiere meson en CI, el más rápido) vs `rav1d` (Rust puro, ~5% más lento single-thread, elimina meson). Criterio: si la API del crate `rav1d` resulta usable directamente, preferirla para simplificar la matriz de builds.
+**Decisión AVIF decode (resuelta por el requisito de playground WASM)**: se prefiere `rav1d` (Rust puro) sobre `dav1d` (C): elimina meson de la matriz de builds y compila a wasm32 sin toolchain extra, a costa de ~5% de velocidad single-thread. Contingencia: si la API del crate `rav1d` resulta inutilizable directamente (es un port orientado a C-API), se usa `dav1d` en targets nativos y `rav1d` solo en WASM.
+
+**Códecs por target**: en los targets nativos la matriz aplica completa. En wasm32 (playground), los dos códecs C (`mozjpeg`, `libwebp`) se compilan con **emscripten** — precedente directo: Squoosh distribuyó exactamente esos códecs como WASM durante años. El resto de la matriz es Rust puro y compila a wasm32 sin toolchain adicional. Fallbacks feature-gated si un códec C resistiera el build WASM: `jpeg-encoder` (JPEG, menor densidad) y WebP lossless-only — documentados como degradación, no silenciosos.
 
 ## 6. API
 
@@ -138,13 +150,31 @@ let out = minipix_core::convert(&buf, Options::format(Format::Avif).quality(60))
 
 ### Flujo de datos
 
-```
+```text
 bytes → sniff (magic bytes) → Decoder del formato
       → DecodedImage { píxeles RGBA8/Gray, alpha, ICC, dimensiones }
       → Encoder(opciones) → bytes + reporte
 ```
 
-## 7. Manejo de errores y seguridad
+## 7. Playground web (M2)
+
+SPA estática donde se arrastran imágenes y se comprimen **enteramente en el navegador**: el core compilado a WASM, cero backend, cero telemetría sobre el contenido — el argumento de privacidad contra TinyPNG hecho producto.
+
+**Stack**: Vite + Svelte + TypeScript. El core entra vía `crates/wasm` (wasm-bindgen). La compresión corre en un **Web Worker** (la UI nunca se congela); threads WASM (rayon vía `wasm-bindgen-rayon`) habilitados con headers COOP/COEP — crítico para que AVIF encode sea tolerable en el browser.
+
+**Funcionalidad**:
+
+- Drag & drop + selector de archivos; múltiples imágenes a la vez.
+- Controles por imagen (con defaults globales): formato destino, `quality`, `effort`, `lossless`, `keepMetadata` — los mismos nombres y semántica que el SDK; el playground ES la demo de la API.
+- Comparador antes/después con slider y zoom (estilo Squoosh).
+- Bytes entrada/salida y % de ahorro por archivo y total.
+- Descarga individual o todo junto (zip generado client-side).
+
+**Hosting**: Cloudflare Pages (gratis, soporta archivo `_headers` para COOP/COEP, deploy desde CI). GitHub Pages queda descartado: no permite headers custom, y sin COOP/COEP no hay threads WASM.
+
+**Alcance**: el binding `crates/wasm` existe para servir al playground; **no** se publica como paquete npm en v1 (eso queda para v2 junto con edge runtimes).
+
+## 8. Manejo de errores y seguridad
 
 - Enum tipado en el core: `UnsupportedFormat`, `DecodeError`, `EncodeError`, `InvalidOptions`, `LimitExceeded`.
 - Cada binding traduce a lo idiomático: clases `Error` con propiedad `code` en JS; jerarquía de excepciones (`MinipixError` base) en Python.
@@ -152,15 +182,16 @@ bytes → sniff (magic bytes) → Decoder del formato
 - **Límite anti-bomba de descompresión**: tope configurable de píxeles totales (default ~268 MP, como sharp) y de dimensiones; un SDK de compresión procesa input no confiable por definición.
 - Respuesta a CVEs: las deps C (mozjpeg, libwebp, dav1d) se monitorean (Dependabot + RUSTSEC); el pipeline permite re-publicar binarios parcheados en los tres registros el mismo día.
 
-## 8. Testing
+## 9. Testing
 
 1. **Unit tests** en el core por camino de códec (cada formato × lossy/lossless × con/sin alpha × con/sin ICC).
 2. **Conformance cross-lenguaje**: los mismos vectores de `tests/vectors/` corren contra los artefactos de npm, PyPI y crates.io en CI; se asserta **igualdad byte a byte entre lenguajes**. Entre *versiones* del core solo se exigen tolerancias: cada vector guarda valores golden (SSIM contra el original y tamaño en bytes) generados al crearlo, y una actualización de códec pasa si SSIM no cae más de 0.005 ni el tamaño crece más de 3% respecto del golden; superar eso exige regenerar los goldens de forma explícita y justificada en el PR.
 3. **Property tests**: roundtrip `decode(encode(x)) == x` en caminos lossless (proptest).
 4. **Fuzzing** (cargo-fuzz) sobre el sniffer y la capa de glue de decoders.
 5. **Benchmarks** (criterion) + comparativa reproducible contra sharp y Pillow — no bloquea CI; alimenta README y sostiene el claim de calidad con números.
+6. **Playground (M2)**: smoke E2E con Playwright — cargar la página, comprimir un vector en el browser, assertar reducción de tamaño y descarga. Paridad nativo↔WASM con tolerancias (SSIM/tamaño), **no** byte a byte: los caminos SIMD nativos vs WASM pueden divergir legítimamente; la promesa contractual de bytes idénticos aplica solo entre los tres bindings nativos.
 
-## 9. CI y distribución
+## 10. CI y distribución
 
 - **GitHub Actions** con plantillas oficiales: napi-rs CLI para npm, maturin-action para PyPI.
 - **Matriz v1**: Linux x64/arm64 (glibc + musl), macOS x64/arm64, Windows x64. (win-arm64: stretch goal.)
@@ -168,9 +199,10 @@ bytes → sniff (magic bytes) → Decoder del formato
 - **PyPI**: wheels abi3 (abi3-py39) — un wheel por plataforma cubre todas las versiones de CPython ≥ 3.9.
 - **crates.io**: `cargo publish` del core; los usuarios de Rust compilan de fuente (norma del ecosistema). Documentar requisitos: cmake + nasm (mozjpeg), y meson solo si queda dav1d.
 - **Release**: un tag → publica a los tres registros con la misma versión.
-- Toolchain de CI para deps C: nasm (mozjpeg), cmake (libwebp), meson (dav1d, si aplica).
+- Toolchain de CI para deps C: nasm (mozjpeg), cmake (libwebp), meson (solo si la contingencia dav1d se activa).
+- **M2**: job WASM (emscripten + wasm-bindgen) que compila `crates/wasm`, build del playground (Vite) y deploy automático a Cloudflare Pages con `_headers` COOP/COEP.
 
-## 10. Riesgos y mitigaciones
+## 11. Riesgos y mitigaciones
 
 | Riesgo | Mitigación |
 | --- | --- |
@@ -179,8 +211,10 @@ bytes → sniff (magic bytes) → Decoder del formato
 | Bus factor kornelski (mozjpeg, ravif, avif-serialize) | Pin de versiones + vendoring posible; los crates son maduros y estables |
 | Deps C multiplican la matriz de builds | Plantillas napi-rs/maturin-action ya resuelven esto (precedentes: sharp, polars); preferir rav1d sobre dav1d si es viable |
 | sharp/Pillow cierran el gap | El diferenciador (paridad 3 lenguajes + licencias permisivas + un solo motor) requiere re-arquitectura para los incumbentes; ejecutar rápido |
+| Build WASM de los códecs C (emscripten) es la parte más experimental del proyecto | Precedente directo (Squoosh distribuyó mozjpeg/libwebp como WASM años); está aislado en M2 (no bloquea el SDK); fallbacks Rust puros feature-gated documentados |
+| AVIF encode en el browser es lento | Threads WASM vía COOP/COEP en Cloudflare Pages; `effort` bajo por defecto en el playground; indicador de progreso para que no parezca colgado |
 | Sostenibilidad (@squoosh/lib murió por staffing) | Alcance v1 deliberadamente acotado; automatización máxima de release; decisión consciente antes de ampliar superficie |
 
-## 11. Ideas para v2+ (explícitamente fuera de v1)
+## 12. Ideas para v2+ (explícitamente fuera de v1)
 
-- Resize/variantes responsive; CLI fina sobre el core; WASM para browser/edge (rav1d y los códecs Rust puros ya compilan a wasm32; mozjpeg/libwebp requerirían emscripten o reemplazo); JPEG XL y GIF; modo "target size" / calidad perceptual automática (butteraugli/SSIMULACRA); backend AVIF de alta densidad (libaom/SVT-AV1) como feature opcional.
+- Resize/variantes responsive; CLI fina sobre el core; publicar el build WASM como paquete npm (`@minipix/wasm`) para browser/edge runtimes (el build ya existe por el playground — falta empaquetado, docs y API pública estable); JPEG XL y GIF; modo "target size" / calidad perceptual automática (butteraugli/SSIMULACRA); backend AVIF de alta densidad (libaom/SVT-AV1) como feature opcional; PWA/offline para el playground.
