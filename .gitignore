@@ -1,0 +1,22 @@
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+
+# Artefactos de bindings
+*.node
+*.pyd
+*.so
+*.dylib
+pkg/
+
+# IDE / SO
+.DS_Store
+Thumbs.db

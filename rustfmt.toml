@@ -1,0 +1,4 @@
+# Solo opciones estables (cargo fmt en toolchain stable).
+newline_style = "Unix"
+use_field_init_shorthand = true
+use_try_shorthand = true
