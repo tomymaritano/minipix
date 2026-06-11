@@ -1,6 +1,6 @@
 name: ci
 on:
-  push: { branches: [master] }
+  push: { branches: [master, develop] }
   pull_request:
 jobs:
   lint-test:

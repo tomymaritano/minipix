@@ -10,6 +10,12 @@ SDK de compresión/conversión de imágenes (PNG, JPEG, WebP, AVIF) con core en 
 4. **Ningún pánico cruza la FFI**: `catch_unwind` en el borde de cada binding. Un pánico se reporta como error interno, jamás aborta el proceso anfitrión.
 5. **Árbol de licencias permisivo** (MIT/Apache/BSD/Zlib/IJG). Nada GPL/LGPL/AGPL — lo aplica `cargo deny check` en CI; no agregar excepciones a `deny.toml` sin discutirlo primero.
 
+## Git flow
+
+- `master`: solo releases (merge desde `develop` + tag `vX.Y.Z` que dispara el pipeline de publicación).
+- `develop`: rama de integración — todo feature mergea acá primero.
+- Features: `feat/<nombre>` desde `develop`; fixes: `fix/<nombre>`. Commits frecuentes, CI verde antes de mergear.
+
 ## Principios
 
 - **KISS**: la implementación simple y obvia primero. La complejidad se justifica con un problema real medido, no anticipado.
