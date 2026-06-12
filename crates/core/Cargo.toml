@@ -22,6 +22,7 @@ rgb = { version = "0.8", features = ["bytemuck"] }
 imgref = "1"
 bytemuck = "1"
 avif-parse = "1"
+moxcms = "0.8.1"
 
 [dev-dependencies]
 jpeg-encoder = "0.7"

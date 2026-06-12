@@ -1,6 +1,8 @@
 //! minipix core: compresión y conversión de imágenes (PNG, JPEG, WebP, AVIF).
 
 pub(crate) mod codecs;
+/// Conversión de espacio de color ICC → sRGB para decoders.
+pub(crate) mod color;
 /// Error types for core operations.
 pub mod error;
 /// Tipos de formato de imagen soportados.

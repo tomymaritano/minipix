@@ -84,6 +84,10 @@ impl ImageDecoder for AvifCodec {
             });
         }
 
+        // Nota ICC: AVIF lleva color information en el box nclx/colr, que avif-decode
+        // gestiona internamente al convertir el frame AV1. No se aplica apply_icc_best_effort
+        // aquí: la conversión de color ya está implícita en to_image().
+
         // Decodifica el frame AV1 completo (color conversion incluida).
         // A partir de aquí las dimensiones reales están disponibles.
         let decoder = avif_decode::Decoder::from_avif(data).map_err(decode_err)?;

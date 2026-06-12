@@ -38,4 +38,8 @@ pub enum Error {
         /// Límite configurado (`Options::max_pixels`).
         limit: u64,
     },
+
+    /// ICC profile parse or transform error.
+    #[error("ICC color transform error: {0}")]
+    IccTransform(String),
 }

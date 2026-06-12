@@ -52,8 +52,12 @@ impl ImageDecoder for JpegCodec {
                 limit: max_pixels,
             });
         }
+        // ICC disponible tras decode_headers(); llamar antes de decode().
+        let icc = dec.icc_profile();
 
-        let buf = dec.decode().map_err(decode_err)?;
+        let mut buf = dec.decode().map_err(decode_err)?;
+        // wiring probado vía tests de color.rs; e2e con fixture ICC queda en backlog
+        crate::color::apply_icc_best_effort(&mut buf, icc.as_deref());
         DecodedImage::new(w, h, buf).map_err(decode_err)
     }
 }

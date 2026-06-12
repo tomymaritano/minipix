@@ -41,6 +41,9 @@ impl ImageDecoder for PngCodec {
                 limit: max_pixels,
             });
         }
+        // Extraer ICC antes de next_frame para evitar conflictos de borrow.
+        // icc_profile es Option<Cow<[u8]>>; lo clonamos a Vec<u8> propio.
+        let icc = info.icc_profile.as_ref().map(|c| c.as_ref().to_vec());
         let buf_size = reader
             .output_buffer_size()
             .ok_or_else(|| decode_err("output too large"))?;
@@ -48,7 +51,7 @@ impl ImageDecoder for PngCodec {
         let info = reader.next_frame(&mut buf).map_err(decode_err)?;
         buf.truncate(info.buffer_size());
         // Tras normalize_to_color8|ALPHA el output es RGBA8 o GrayscaleAlpha.
-        let rgba = match info.color_type {
+        let mut rgba = match info.color_type {
             png::ColorType::Rgba => buf,
             png::ColorType::GrayscaleAlpha => buf
                 .chunks_exact(2)
@@ -56,6 +59,8 @@ impl ImageDecoder for PngCodec {
                 .collect(),
             other => return Err(decode_err(format!("unexpected color type {other:?}"))),
         };
+        // wiring probado vía tests de color.rs; e2e con fixture ICC queda en backlog
+        crate::color::apply_icc_best_effort(&mut rgba, icc.as_deref());
         DecodedImage::new(info.width, info.height, rgba).map_err(decode_err)
     }
 }

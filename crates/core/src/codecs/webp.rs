@@ -45,18 +45,22 @@ impl ImageDecoder for WebpCodec {
                 limit: max_pixels,
             });
         }
+        // Extraer ICC antes de read_image (requiere &mut self; se llama una sola vez).
+        let icc = dec.icc_profile().ok().flatten();
         let size = dec
             .output_buffer_size()
             .ok_or_else(|| decode_err("image too large"))?;
         let mut buf = vec![0u8; size];
         dec.read_image(&mut buf).map_err(decode_err)?;
-        let rgba = if dec.has_alpha() {
+        let mut rgba = if dec.has_alpha() {
             buf
         } else {
             buf.chunks_exact(3)
                 .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
                 .collect()
         };
+        // wiring probado vía tests de color.rs; e2e con fixture ICC queda en backlog
+        crate::color::apply_icc_best_effort(&mut rgba, icc.as_deref());
         DecodedImage::new(w, h, rgba).map_err(decode_err)
     }
 }

@@ -630,6 +630,7 @@ dependencies = [
  "imgref",
  "jpeg-encoder",
  "libwebp-sys2 0.2.0",
+ "moxcms",
  "mozjpeg",
  "oxipng",
  "png",
