@@ -9,6 +9,9 @@ repository.workspace = true
 [dependencies]
 thiserror = "2"
 png = "0.18"
+oxipng = { version = "10", default-features = false, features = ["parallel", "zopfli"] }
+quantette = { version = "0.6", features = ["threads"] }
+bytemuck = "1"
 
 [lints]
 workspace = true

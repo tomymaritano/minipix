@@ -1,15 +1,24 @@
 //! PNG: decode con el crate `png` normalizado a RGBA8.
-use crate::codecs::ImageDecoder;
+//! PNG encode: lossless via RGBA8 + oxipng; lossy via quantette indexed.
+use crate::codecs::{ImageDecoder, ImageEncoder};
 use crate::error::Error;
 use crate::format::Format;
 use crate::image::DecodedImage;
+use crate::options::Options;
 
-/// Codec for decoding PNG images to RGBA8.
+/// Codec for decoding and encoding PNG images.
 #[allow(dead_code)] // instanciado sólo en tests hasta que se conecte al dispatcher
 pub(crate) struct PngCodec;
 
 fn decode_err(e: impl std::fmt::Display) -> Error {
     Error::Decode {
+        format: Format::Png,
+        detail: e.to_string(),
+    }
+}
+
+fn encode_err(e: impl std::fmt::Display) -> Error {
+    Error::Encode {
         format: Format::Png,
         detail: e.to_string(),
     }
@@ -49,6 +58,104 @@ impl ImageDecoder for PngCodec {
         };
         DecodedImage::new(info.width, info.height, rgba).map_err(decode_err)
     }
+}
+
+/// `quality` 1-100 → tamaño de paleta 8..=256.
+#[allow(dead_code)]
+fn palette_size(quality: u8) -> u16 {
+    ((u16::from(quality) * 256) / 100).clamp(8, 256)
+}
+
+/// `effort` 0-9 → preset oxipng 0..=6 (7+ activa zopfli).
+#[allow(dead_code)]
+fn oxipng_options(effort: u8) -> oxipng::Options {
+    let mut o = oxipng::Options::from_preset(effort.min(6));
+    if effort >= 7 {
+        o.deflater = oxipng::Deflater::Zopfli(oxipng::ZopfliOptions::default());
+    }
+    o.strip = oxipng::StripChunks::Safe;
+    o
+}
+
+impl ImageEncoder for PngCodec {
+    fn encode(&self, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>, Error> {
+        // Lossy + transparente → fallback a lossless (quantette sólo RGB).
+        let raw = if opts.lossless || opts.quality == 100 || img.has_transparency() {
+            encode_rgba_png(img)?
+        } else {
+            encode_indexed_png(img, palette_size(opts.quality))?
+        };
+        oxipng::optimize_from_memory(&raw, &oxipng_options(opts.effort)).map_err(encode_err)
+    }
+}
+
+#[allow(dead_code)]
+fn encode_rgba_png(img: &DecodedImage) -> Result<Vec<u8>, Error> {
+    let mut out = Vec::new();
+    let mut enc = png::Encoder::new(&mut out, img.width, img.height);
+    enc.set_color(png::ColorType::Rgba);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.set_source_srgb(png::SrgbRenderingIntent::Perceptual);
+    let mut w = enc.write_header().map_err(encode_err)?;
+    w.write_image_data(&img.pixels).map_err(encode_err)?;
+    w.finish().map_err(encode_err)?;
+    Ok(out)
+}
+
+/// Cuantiza con quantette a paleta ≤256 + escribe PNG indexado con tRNS.
+/// Sólo se llama para imágenes OPACAS (alpha=255 siempre).
+#[allow(dead_code)]
+fn encode_indexed_png(img: &DecodedImage, max_colors: u16) -> Result<Vec<u8>, Error> {
+    let (palette, indices) = quantize_rgba(img, max_colors)?;
+    let mut out = Vec::new();
+    let mut enc = png::Encoder::new(&mut out, img.width, img.height);
+    enc.set_color(png::ColorType::Indexed);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.set_source_srgb(png::SrgbRenderingIntent::Perceptual);
+    let plte: Vec<u8> = palette.iter().flat_map(|c| [c[0], c[1], c[2]]).collect();
+    let trns: Vec<u8> = palette.iter().map(|_| 255u8).collect();
+    enc.set_palette(plte);
+    enc.set_trns(trns);
+    let mut w = enc.write_header().map_err(encode_err)?;
+    w.write_image_data(&indices).map_err(encode_err)?;
+    w.finish().map_err(encode_err)?;
+    Ok(out)
+}
+
+/// Cuantiza la imagen (RGBA opaca) a paleta RGB ≤`max_colors` + índices u8 por píxel.
+/// Usa quantette 0.6 Pipeline con Wu quantization y Floyd-Steinberg dithering.
+#[allow(dead_code)]
+fn quantize_rgba(img: &DecodedImage, max_colors: u16) -> Result<(Vec<[u8; 4]>, Vec<u8>), Error> {
+    use quantette::deps::palette::Srgb;
+    use quantette::{ImageRef, Pipeline, dither::FloydSteinberg};
+
+    // Extraer canales RGB desde píxeles RGBA (imagen opaca: alpha siempre 255).
+    let rgb_pixels: Vec<Srgb<u8>> = img
+        .pixels
+        .chunks_exact(4)
+        .map(|px| Srgb::new(px[0], px[1], px[2]))
+        .collect();
+
+    let palette_sz = quantette::PaletteSize::try_from(max_colors)
+        .map_err(|e| encode_err(format!("invalid palette size {max_colors}: {e}")))?;
+
+    let image_ref = ImageRef::new(img.width, img.height, &rgb_pixels)
+        .map_err(|e| encode_err(format!("quantette image ref: {e}")))?;
+
+    let indexed: quantette::IndexedImage<Srgb<u8>> = Pipeline::new()
+        .palette_size(palette_sz)
+        .ditherer(FloydSteinberg::new())
+        .input_image(image_ref)
+        .output_srgb8_indexed_image();
+
+    let (pal, idx) = indexed.into_parts();
+    // Convertir paleta Srgb<u8> → [u8;4] (alpha 255 para imagen opaca).
+    let palette_rgba: Vec<[u8; 4]> = pal
+        .iter()
+        .map(|c| [c.red, c.green, c.blue, 255u8])
+        .collect();
+
+    Ok((palette_rgba, idx))
 }
 
 #[cfg(test)]
@@ -129,5 +236,48 @@ mod tests {
         }
         let out = PngCodec.decode(&bytes, u64::MAX).unwrap();
         assert_eq!(out.pixels, vec![10, 10, 10, 128, 200, 200, 200, 255]);
+    }
+
+    #[test]
+    fn encode_lossless_roundtrip_exacto() {
+        let img = crate::testutil::vector_gradient_circle(48, 32);
+        let opts = crate::Options::default().with_lossless(true);
+        let bytes = PngCodec.encode(&img, &opts).unwrap();
+        let back = PngCodec.decode(&bytes, u64::MAX).unwrap();
+        assert_eq!(back.pixels, img.pixels, "lossless debe ser bit-exacto");
+    }
+
+    #[test]
+    fn encode_lossy_reduce_y_decodea() {
+        let img = crate::testutil::vector_flat_colors(64, 64);
+        let lossless = PngCodec
+            .encode(&img, &crate::Options::default().with_lossless(true))
+            .unwrap();
+        let lossy = PngCodec
+            .encode(&img, &crate::Options::default().with_quality(60))
+            .unwrap();
+        assert!(PngCodec.decode(&lossy, u64::MAX).is_ok());
+        assert!(
+            lossy.len() <= lossless.len(),
+            "paleta no debe ser mayor que lossless en imagen plana"
+        );
+    }
+
+    #[test]
+    fn effort_alto_no_es_mayor() {
+        let img = crate::testutil::vector_gradient_circle(48, 32);
+        let e1 = PngCodec
+            .encode(
+                &img,
+                &crate::Options::default().with_lossless(true).with_effort(1),
+            )
+            .unwrap();
+        let e9 = PngCodec
+            .encode(
+                &img,
+                &crate::Options::default().with_lossless(true).with_effort(9),
+            )
+            .unwrap();
+        assert!(e9.len() <= e1.len());
     }
 }

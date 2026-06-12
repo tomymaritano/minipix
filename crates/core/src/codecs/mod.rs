@@ -16,7 +16,7 @@ pub(crate) trait ImageDecoder {
 }
 
 /// Codifica RGBA8 sRGB a bytes del formato según `Options`.
-#[allow(dead_code)] // usado por los códecs (Tasks 7-13)
+#[allow(dead_code)] // PngCodec impl exists; dispatcher wiring is a later task
 pub(crate) trait ImageEncoder {
     fn encode(&self, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>, Error>;
 }
