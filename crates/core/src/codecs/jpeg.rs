@@ -21,7 +21,13 @@ impl ImageDecoder for JpegCodec {
         use zune_core::options::DecoderOptions;
         use zune_jpeg::JpegDecoder;
 
-        let opts = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGBA);
+        // max_pixels gobierna el área total; cada eje puede ser a lo sumo max_pixels.
+        // max_scans/deflate_limit se dejan en los defaults anti-DoS de zune a propósito.
+        let axis_cap = usize::try_from(max_pixels).unwrap_or(usize::MAX);
+        let opts = DecoderOptions::default()
+            .jpeg_set_out_colorspace(ColorSpace::RGBA)
+            .set_max_width(axis_cap)
+            .set_max_height(axis_cap);
         let mut dec =
             JpegDecoder::new_with_options(zune_core::bytestream::ZCursor::new(data), opts);
 
@@ -94,5 +100,18 @@ mod tests {
                 limit: 100
             }
         ));
+    }
+
+    #[test]
+    fn ancho_mayor_a_16384_es_valido_si_max_pixels_lo_permite() {
+        // 19000x2 = 38000 px: supera el eje default de zune (16384) pero no nuestro límite.
+        let w = 19000u16;
+        let rgb = vec![128u8; usize::from(w) * 2 * 3];
+        let mut bytes = Vec::new();
+        jpeg_encoder::Encoder::new(&mut bytes, 90)
+            .encode(&rgb, w, 2, jpeg_encoder::ColorType::Rgb)
+            .unwrap();
+        let out = JpegCodec.decode(&bytes, u64::MAX).unwrap();
+        assert_eq!((out.width, out.height), (u32::from(w), 2));
     }
 }
