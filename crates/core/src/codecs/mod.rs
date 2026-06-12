@@ -3,6 +3,7 @@ use crate::error::Error;
 use crate::image::DecodedImage;
 use crate::options::Options;
 
+pub(crate) mod avif;
 pub(crate) mod jpeg;
 pub(crate) mod png;
 pub(crate) mod webp;
