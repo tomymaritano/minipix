@@ -102,8 +102,8 @@ fn encode_rgba_png(img: &DecodedImage) -> Result<Vec<u8>, Error> {
     Ok(out)
 }
 
-/// Cuantiza con quantette a paleta ≤256 + escribe PNG indexado con tRNS.
-/// Sólo se llama para imágenes OPACAS (alpha=255 siempre).
+/// Cuantiza con quantette a paleta ≤256 + escribe PNG indexado opaco.
+/// Sólo se llama para imágenes OPACAS (alpha=255 siempre); escribe PLTE sin tRNS.
 #[allow(dead_code)]
 fn encode_indexed_png(img: &DecodedImage, max_colors: u16) -> Result<Vec<u8>, Error> {
     let (palette, indices) = quantize_rgba(img, max_colors)?;
@@ -113,9 +113,7 @@ fn encode_indexed_png(img: &DecodedImage, max_colors: u16) -> Result<Vec<u8>, Er
     enc.set_depth(png::BitDepth::Eight);
     enc.set_source_srgb(png::SrgbRenderingIntent::Perceptual);
     let plte: Vec<u8> = palette.iter().flat_map(|c| [c[0], c[1], c[2]]).collect();
-    let trns: Vec<u8> = palette.iter().map(|_| 255u8).collect();
     enc.set_palette(plte);
-    enc.set_trns(trns);
     let mut w = enc.write_header().map_err(encode_err)?;
     w.write_image_data(&indices).map_err(encode_err)?;
     w.finish().map_err(encode_err)?;
@@ -142,6 +140,7 @@ fn quantize_rgba(img: &DecodedImage, max_colors: u16) -> Result<(Vec<[u8; 4]>, V
     let image_ref = ImageRef::new(img.width, img.height, &rgb_pixels)
         .map_err(|e| encode_err(format!("quantette image ref: {e}")))?;
 
+    // parallel debe quedar en false: el dither serial es la garantía de determinismo byte a byte.
     let indexed: quantette::IndexedImage<Srgb<u8>> = Pipeline::new()
         .palette_size(palette_sz)
         .ditherer(FloydSteinberg::new())
