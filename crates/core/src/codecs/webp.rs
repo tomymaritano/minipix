@@ -80,9 +80,9 @@ impl ImageEncoder for WebpCodec {
 
 /// FFI con libwebp: ÚNICO módulo unsafe del workspace (CLAUDE.md).
 ///
-/// Toda la memoria C se limpia en TODOS los caminos (éxito y error):
-/// - `WebPPictureFree` después de import exitoso Y en error post-init.
-/// - `WebPMemoryWriterClear` tanto en encode-failure como después de copiar out.
+/// Toda la memoria C se limpia en TODOS los caminos (éxito y error) mediante
+/// guards RAII (`PictureGuard` y `WriterGuard`) que llaman a los destructores
+/// de libwebp desde sus implementaciones `Drop`.
 #[allow(unsafe_code)]
 mod ffi {
     use libwebp_sys as sys;
@@ -93,6 +93,55 @@ mod ffi {
         pub alpha_quality: i32,
         pub method: i32,
         pub lossless: bool,
+    }
+
+    // ── Fix 1: shim seguro sin transmute ────────────────────────────────────
+    /// Shim seguro: confina el unsafe a la LLAMADA FFI real, no a reinterpretar
+    /// el qualifier del puntero a función.
+    extern "C" fn write_shim(
+        d: *const u8,
+        n: usize,
+        p: *const sys::WebPPicture,
+    ) -> std::os::raw::c_int {
+        // SAFETY: libwebp garantiza d/n/p válidos durante el callback.
+        unsafe { sys::WebPMemoryWrite(d, n, p) }
+    }
+
+    // ── Fix 3: guards RAII ──────────────────────────────────────────────────
+
+    /// Libera `WebPPicture` al salir del scope (cleanup robusto ante early-returns).
+    struct PictureGuard(sys::WebPPicture);
+    impl Drop for PictureGuard {
+        fn drop(&mut self) {
+            // SAFETY: self.0 fue inicializada por WebPPictureInit; Free es no-op si no hay alloc.
+            unsafe { sys::WebPPictureFree(&raw mut self.0) };
+        }
+    }
+
+    /// Limpia `WebPMemoryWriter` al salir del scope.
+    struct WriterGuard(sys::WebPMemoryWriter);
+    impl Drop for WriterGuard {
+        fn drop(&mut self) {
+            // SAFETY: self.0 fue inicializada por WebPMemoryWriterInit; Clear es idempotente sobre mem NULL.
+            unsafe { sys::WebPMemoryWriterClear(&raw mut self.0) };
+        }
+    }
+
+    // ── Fix 4: helper de nombres de error ───────────────────────────────────
+    fn encode_error_name(code: u32) -> &'static str {
+        match code {
+            1 => "out of memory",
+            2 => "bitstream out of memory",
+            3 => "null parameter",
+            4 => "invalid configuration",
+            5 => "bad dimension (WebP max is 16383x16383)",
+            6 => "partition is bigger than 512k",
+            7 => "partition is bigger than 16M",
+            8 => "bad write",
+            9 => "file is bigger than 4G",
+            10 => "user abort",
+            _ => "unknown error",
+        }
     }
 
     /// Codifica `rgba` (RGBA8, stride = width*4) a bytes WebP.
@@ -124,11 +173,11 @@ mod ffi {
             c
         };
 
-        // ── 2. Inicializar WebPPicture e importar RGBA ───────────────────────
-        // SAFETY: `pic` se inicializa con `WebPPictureInit` antes de leerse.
+        // ── 2. Inicializar WebPPicture, importar RGBA, envolver en guard ─────
+        // SAFETY: `p2` se inicializa con `WebPPictureInit` antes de leerse.
         // `rgba.as_ptr()` apunta a un slice vivo durante toda esta llamada.
-        // `WebPPictureFree` se llama en todos los caminos post-import.
-        let mut pic = unsafe {
+        // `PictureGuard::drop` llama `WebPPictureFree` en todos los caminos.
+        let mut pic_guard = unsafe {
             let mut p2: sys::WebPPicture = std::mem::zeroed();
             if sys::WebPPictureInit(&raw mut p2) == 0 {
                 return Err("WebPPictureInit failed".into());
@@ -140,73 +189,65 @@ mod ffi {
             let stride = i32::try_from(width.checked_mul(4).ok_or("width overflow")?)
                 .map_err(|e| e.to_string())?;
             if sys::WebPPictureImportRGBA(&raw mut p2, rgba.as_ptr(), stride) == 0 {
+                // p2 fue inicializada; Free antes de retornar.
                 sys::WebPPictureFree(&raw mut p2);
                 return Err("WebPPictureImportRGBA failed (out of memory?)".into());
             }
-            p2
+            PictureGuard(p2)
         };
 
         // ── 3. Inicializar WebPMemoryWriter y cablear el writer ──────────────
-        // SAFETY: `writer` se inicializa con `WebPMemoryWriterInit` antes de
-        // leerse. El puntero `pic.custom_ptr` apunta a `writer` cuyo lifetime
-        // abarca todo el encode. `WebPMemoryWriterClear` se llama en todos los
-        // caminos post-init (éxito y error de encode).
-        let mut writer = unsafe {
+        // SAFETY: `writer_guard.0` se inicializa con `WebPMemoryWriterInit`.
+        // `pic_guard.0.custom_ptr` apunta a `writer_guard.0`; writer_guard NO
+        // se mueve entre este punto y el final de `WebPEncode` (permanece en
+        // el mismo stack frame). `WriterGuard::drop` llama `WebPMemoryWriterClear`
+        // en todos los caminos, incluyendo early returns por error de encode.
+        let mut writer_guard = unsafe {
             let mut w: sys::WebPMemoryWriter = std::mem::zeroed();
             sys::WebPMemoryWriterInit(&raw mut w);
-            w
+            WriterGuard(w)
         };
 
-        // SAFETY: `WebPMemoryWrite` tiene la misma firma ABI que `WebPWriterFunction`
-        // (Option<extern "C" fn(...)>). La declaración FFI la marca `unsafe`
-        // porque procede de un bloque `extern "C"`. El transmute es seguro:
-        // ambas variantes comparten convención de llamada y tipos idénticos;
-        // las precondiciones del callback (punteros válidos, writer inicializado)
-        // las garantiza libwebp internamente. `pic.custom_ptr` apunta a `writer`
-        // que vive en el mismo stack frame y no se mueve antes de que
-        // `WebPEncode` retorne.
-        // SAFETY: `addr_of_mut!` obtiene un puntero raw a `writer` sin crear
-        // ninguna referencia intermedia al dato parcialmente inicializado.
-        unsafe {
-            pic.writer = Some(std::mem::transmute::<
-                unsafe extern "C" fn(*const u8, usize, *const sys::WebPPicture) -> std::ffi::c_int,
-                extern "C" fn(*const u8, usize, *const sys::WebPPicture) -> std::ffi::c_int,
-            >(sys::WebPMemoryWrite));
-            pic.custom_ptr = std::ptr::addr_of_mut!(writer).cast();
-        }
+        // Fix 1: usar write_shim en lugar de transmute de WebPMemoryWrite.
+        // SAFETY: write_shim tiene la firma ABI correcta de WebPWriterFunction.
+        // `pic_guard.0.custom_ptr` apunta a `writer_guard.0` cuyo lifetime
+        // abarca todo el encode; no hay movimiento del writer hasta después
+        // de que WebPEncode retorne.
+        pic_guard.0.writer = Some(write_shim);
+        pic_guard.0.custom_ptr = (&raw mut writer_guard.0).cast();
 
         // ── 4. Encode ────────────────────────────────────────────────────────
-        // SAFETY: `config` y `pic` están completamente inicializados. Libwebp
-        // escribe en `writer.mem` (heap propio de libwebp); nosotros lo
-        // copiamos a un Vec antes de liberar con `WebPMemoryWriterClear`.
-        let ok = unsafe { sys::WebPEncode(&raw const config, &raw mut pic) };
+        // SAFETY: `config` y `pic_guard.0` están completamente inicializados.
+        // Libwebp escribe en `writer_guard.0.mem` (heap propio de libwebp);
+        // copiamos a un Vec antes de que WriterGuard llame WebPMemoryWriterClear.
+        let ok = unsafe { sys::WebPEncode(&raw const config, &raw mut pic_guard.0) };
 
-        // Capturar error_code antes de free (pic se invalida tras Free).
-        // SAFETY: `pic` aún es válido en este punto; Free limpia la memoria
-        // interna asignada pero el struct local sigue siendo legible.
-        let error_code = unsafe {
-            let ec = pic.error_code;
-            sys::WebPPictureFree(&raw mut pic);
-            ec
-        };
+        // Capturar error_code antes de que PictureGuard::drop libere pic.
+        // SAFETY: `pic_guard.0` aún es válido en este punto.
+        let error_code = pic_guard.0.error_code;
+        // Liberar explícitamente la picture (aunque Drop también lo haría).
+        // Hacemos drop aquí para dejar claro el orden de limpieza.
+        drop(pic_guard);
 
         if ok == 0 {
-            // SAFETY: `writer` fue inicializado con `WebPMemoryWriterInit`;
-            // WebPMemoryWriterClear libera `writer.mem` si fue asignado.
-            unsafe { sys::WebPMemoryWriterClear(&raw mut writer) };
-            return Err(format!("WebPEncode failed with code {error_code:?}"));
+            // WriterGuard::drop limpiará writer_guard al salir del scope.
+            let code = error_code as u32;
+            return Err(format!(
+                "WebPEncode failed: {} (code {})",
+                encode_error_name(code),
+                code
+            ));
         }
 
-        // ── 5. Copiar output y liberar ───────────────────────────────────────
-        // SAFETY: `writer.mem` apunta a `writer.size` bytes consecutivos válidos
-        // escritos por libwebp. Los copiamos a un Vec de Rust antes de llamar a
-        // `WebPMemoryWriterClear`, que libera el buffer C original.
-        let out = unsafe {
-            let slice = std::slice::from_raw_parts(writer.mem, writer.size);
-            let v = slice.to_vec();
-            sys::WebPMemoryWriterClear(&raw mut writer);
-            v
+        // ── 5. Copiar output antes de que WriterGuard limpie el buffer ───────
+        // Fix 2: guard contra NULL mem / size 0 (UB con from_raw_parts(NULL,0)).
+        let out = if writer_guard.0.size == 0 || writer_guard.0.mem.is_null() {
+            Vec::new()
+        } else {
+            // SAFETY: size > 0 y mem no nulo ⇒ size bytes contiguos válidos escritos por libwebp.
+            unsafe { std::slice::from_raw_parts(writer_guard.0.mem, writer_guard.0.size).to_vec() }
         };
+        // WriterGuard::drop llama WebPMemoryWriterClear al salir de este scope.
 
         Ok(out)
     }
@@ -324,5 +365,17 @@ mod tests {
             .unwrap();
         let back = WebpCodec.decode(&bytes, u64::MAX).unwrap();
         assert!(back.has_transparency());
+    }
+
+    // Fix 5: dimension-limit test
+    #[test]
+    fn dimension_mayor_a_16383_da_error_claro() {
+        // WebP no soporta >16383 por eje: 16390x1.
+        let px = vec![128u8; 16390 * 4];
+        let img = crate::image::DecodedImage::new(16390, 1, px).unwrap();
+        let err = WebpCodec
+            .encode(&img, &crate::Options::default())
+            .unwrap_err();
+        assert!(err.to_string().contains("bad dimension"), "fue: {err}");
     }
 }
