@@ -2,7 +2,14 @@ import init, { compress, convert, encodeRgba } from '../wasm/minipix_wasm.js';
 import type { CompressRequest, WorkerResponse } from './protocol';
 
 // Initialize wasm once; awaited before handling any message.
-const ready = init();
+// On failure the error is captured here so handle() can post WasmInitError
+// and self.close() — making the slot terminal rather than silently broken.
+let initError: Error | null = null;
+const ready = init().catch((e: unknown) => {
+  initError = e instanceof Error ? e : new Error(String(e));
+  // Re-throw so `await ready` in handle() still rejects.
+  throw initError;
+});
 
 /**
  * Detect AVIF by ISO-BMFF 'ftyp' box at offset 4 + major brand 'avif'/'avis' at 8..11.
@@ -106,6 +113,19 @@ async function handle(req: CompressRequest): Promise<void> {
     );
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
+
+    // Init failure: the wasm artifact never loaded. This slot is permanently
+    // broken — post a typed error and terminate so the pool replaces the slot
+    // with clear WasmInitError responses instead of a bricked, silent slot.
+    if (
+      initError !== null &&
+      (e === initError || (e instanceof Error && e.message === initError.message))
+    ) {
+      post({ id: req.id, ok: false, code: 'WasmInitError', message: m });
+      self.close();
+      return;
+    }
+
     const code =
       e instanceof WebAssembly.RuntimeError
         ? 'InternalPanic'

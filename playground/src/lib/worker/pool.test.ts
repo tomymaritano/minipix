@@ -242,4 +242,110 @@ describe('WorkerPool', () => {
 
     pool.destroy();
   });
+
+  // ── (f) worker 'error' event: in-flight rejects once, worker replaced, queued job processes ──
+
+  it('(f) worker error event rejects in-flight job exactly once, replaces worker, queued job still processes', async () => {
+    const { WorkerJobError } = await import('./pool');
+    const pool = await createPool(1);
+
+    const p1 = pool.run(makeReq(50));
+    const p2 = pool.run(makeReq(51)); // queued while slot is busy
+
+    const crashedWorker = workers[0];
+    expect(crashedWorker).toBeDefined();
+
+    // Simulate a worker-level error (e.g. uncaught exception, script parse error).
+    crashedWorker?.emitError('Script error.');
+
+    // p1 must reject with code 'WorkerError'.
+    await expect(p1).rejects.toBeInstanceOf(WorkerJobError);
+    await expect(p1).rejects.toMatchObject({ code: 'WorkerError' });
+
+    // The crashed worker was replaced.
+    expect(crashedWorker?.terminated).toBe(true);
+
+    // A new worker was spawned and received the queued job 51.
+    expect(workers).toHaveLength(2);
+    const newWorker = workers[1];
+    expect(newWorker?.sent).toHaveLength(1);
+
+    // Resolve job 51 on the new worker — no hung promise.
+    newWorker?.emit(makeSuccess(51));
+    const result = await p2;
+    expect(result.id).toBe(51);
+
+    pool.destroy();
+  });
+
+  // ── (g) destroy() with in-flight + queued: ALL settle rejected, no hung promises ──
+
+  it('(g) destroy() rejects all in-flight and queued jobs, workers terminated', async () => {
+    const { WorkerJobError } = await import('./pool');
+    const pool = await createPool(2);
+
+    // Fill both slots.
+    const p1 = pool.run(makeReq(60));
+    const p2 = pool.run(makeReq(61));
+    // Queue two more.
+    const p3 = pool.run(makeReq(62));
+    const p4 = pool.run(makeReq(63));
+
+    // Both workers spawned.
+    expect(workers).toHaveLength(2);
+
+    pool.destroy();
+
+    // All four promises must settle rejected — no hung promises.
+    const results = await Promise.allSettled([p1, p2, p3, p4]);
+    for (const r of results) {
+      expect(r.status).toBe('rejected');
+      if (r.status === 'rejected') {
+        expect(r.reason).toBeInstanceOf(WorkerJobError);
+        expect(r.reason).toMatchObject({ code: 'Destroyed' });
+      }
+    }
+
+    // Both workers were terminated.
+    expect(workers[0]?.terminated).toBe(true);
+    expect(workers[1]?.terminated).toBe(true);
+  });
+
+  // ── (h) factory throws on spawn → job rejects with WorkerSpawnError, pool still functional ──
+
+  it('(h) factory throws → job rejects with WorkerSpawnError, subsequent jobs succeed after factory recovers', async () => {
+    const { WorkerJobError, WorkerPool } = await import('./pool');
+
+    let callCount = 0;
+    const pool = new WorkerPool(() => {
+      callCount++;
+      if (callCount === 1) {
+        // First spawn throws (e.g. 404'd script).
+        throw new Error('Failed to load worker script');
+      }
+      // Second spawn succeeds.
+      const w = new FakeWorker();
+      workers.push(w);
+      return w as unknown as Worker;
+    }, 1);
+
+    const p1 = pool.run(makeReq(70));
+
+    // p1 must reject with WorkerSpawnError.
+    await expect(p1).rejects.toBeInstanceOf(WorkerJobError);
+    await expect(p1).rejects.toMatchObject({ code: 'WorkerSpawnError' });
+
+    // Slot is now idle (null). Submit another job — factory succeeds this time.
+    const p2 = pool.run(makeReq(71));
+
+    expect(workers).toHaveLength(1);
+    const w = workers[0];
+    expect(w?.sent).toHaveLength(1);
+
+    w?.emit(makeSuccess(71));
+    const result = await p2;
+    expect(result.id).toBe(71);
+
+    pool.destroy();
+  });
 });

@@ -111,7 +111,17 @@ export class WorkerPool {
     // Lazy-spawn the worker on first use of this slot.
     let worker = this.slots[slot];
     if (!worker) {
-      worker = this.spawnWorker(slot);
+      try {
+        worker = this.spawnWorker(slot);
+      } catch (e) {
+        // Factory threw (e.g. 404'd worker script). Settle the job with a
+        // typed error, leave the slot null+idle so future dispatches retry.
+        const msg = e instanceof Error ? e.message : String(e);
+        job.reject(new WorkerJobError('WorkerSpawnError', msg));
+        // slotJob stays -1 (idle); drain the next queued job into this slot.
+        this.drainNext(slot);
+        return;
+      }
     }
 
     this.slotJob.set(slot, job.req.id);
@@ -140,6 +150,12 @@ export class WorkerPool {
     const jobId = this.slotJob.get(slot);
     if (jobId === undefined || jobId === -1) return; // stale message
 
+    // Stale-id guard: defensive against handlers outliving termination.
+    // Invariant: no double-settle — worker posts ErrorResponse then self.close();
+    // self.close() does NOT fire onerror, and if it ever did, slotJob would be
+    // -1 by then (cleared above), so the guard above already returns early.
+    if (msg.id !== jobId) return;
+
     const job = this.pending.get(jobId);
     if (!job) return;
 
@@ -160,8 +176,10 @@ export class WorkerPool {
       const { code } = msg;
       const err = new WorkerJobError(code, msg.message);
 
-      if (code === 'InternalPanic') {
+      if (code === 'InternalPanic' || code === 'WasmInitError') {
         // The worker will self.close() — terminate & respawn proactively.
+        // WasmInitError: respawn won't fix a missing artifact but converts the
+        // state into clear, typed errors instead of a bricked silent slot.
         this.replaceWorker(slot);
       }
 
