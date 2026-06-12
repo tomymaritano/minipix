@@ -260,9 +260,10 @@ jobs:
             elif command -v apt-get &>/dev/null; then
               apt-get install -y cmake perl || true
             fi
-            # Build nasm from source if the version is < 2.16
+            # Build nasm from source unless the version is 2.16.x
+            # (2.15 es viejo Y 3.x rompe el check de cmake de libaom — solo sirve 2.16.x)
             NASM_VER=$(nasm --version 2>/dev/null | awk '{print $3}' || echo "0.0.0")
-            if [[ "$NASM_VER" < "2.16" ]]; then
+            if [[ "$NASM_VER" != 2.16* ]]; then
               echo "nasm $NASM_VER is too old, building 2.16.03 from source..."
               curl -fsSL https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/nasm-2.16.03.tar.gz | tar xz
               pushd nasm-2.16.03 && ./configure && make -j$(nproc) && make install && popd
@@ -298,7 +299,7 @@ jobs:
           # Same nasm guard for musl container
           before-script-linux: |
             NASM_VER=$(nasm --version 2>/dev/null | awk '{print $3}' || echo "0.0.0")
-            if [[ "$NASM_VER" < "2.16" ]]; then
+            if [[ "$NASM_VER" != 2.16* ]]; then
               echo "nasm $NASM_VER is too old, building 2.16.03 from source..."
               curl -fsSL https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/nasm-2.16.03.tar.gz | tar xz
               pushd nasm-2.16.03 && ./configure && make -j$(nproc) && make install && popd
@@ -469,6 +470,7 @@ jobs:
           version: "2.16.03"
 
       - name: Publish minipix-core to crates.io
-        # --no-verify skips the test build inside a temp dir (already tested in CI)
-        # Remove --no-verify if you want the extra safety net (slower)
-        run: cargo publish -p minipix-core --token ${{ secrets.CRATES_TOKEN }}
+        # El token va por env (no por CLI arg) — patrón idiomático de cargo.
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
+        run: cargo publish -p minipix-core
