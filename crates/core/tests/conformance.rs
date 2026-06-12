@@ -43,6 +43,20 @@ fn matrix() -> Vec<(String, Vec<u8>)> {
                 .expect("convert");
             cases.push((format!("{vector}.convert.{tag}.q75e4"), out.data));
         }
+        // WebP lossless: native usa libwebp (C); wasm usa image-webp (VP8L Rust).
+        // Esta clave refleja el output NATIVO (libwebp). El golden wasm-específico
+        // se almacena en tests/conformance/goldens-wasm.json (generado en Step 3).
+        let webp_lossless = convert(
+            &input,
+            &Options::default()
+                .with_format(Format::WebP)
+                .with_lossless(true),
+        )
+        .expect("convert webp lossless");
+        cases.push((
+            format!("{vector}.convert.webp.lossless"),
+            webp_lossless.data,
+        ));
     }
     cases
 }
