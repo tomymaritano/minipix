@@ -5,7 +5,8 @@ import type { CompressRequest, WorkerResponse } from './protocol';
 const ready = init();
 
 /**
- * Detect AVIF by the 'ftyp' box at offset 4.
+ * Detect AVIF by ISO-BMFF 'ftyp' box at offset 4 + major brand 'avif'/'avis' at 8..11.
+ * Matches the core's sniff to avoid routing HEIC/MP4 to browser decoder.
  * Uses explicit undefined-guards for noUncheckedIndexedAccess.
  */
 function isAvif(bytes: Uint8Array): boolean {
@@ -14,15 +15,27 @@ function isAvif(bytes: Uint8Array): boolean {
   const b5 = bytes[5];
   const b6 = bytes[6];
   const b7 = bytes[7];
+  const b8 = bytes[8];
+  const b9 = bytes[9];
+  const b10 = bytes[10];
+  const b11 = bytes[11];
   return (
     b4 !== undefined &&
     b5 !== undefined &&
     b6 !== undefined &&
     b7 !== undefined &&
+    b8 !== undefined &&
+    b9 !== undefined &&
+    b10 !== undefined &&
+    b11 !== undefined &&
     b4 === 0x66 && // 'f'
     b5 === 0x74 && // 't'
     b6 === 0x79 && // 'y'
-    b7 === 0x70 // 'p'
+    b7 === 0x70 && // 'p'
+    b8 === 0x61 && // 'a'
+    b9 === 0x76 && // 'v'
+    b10 === 0x69 && // 'i'
+    (b11 === 0x66 || b11 === 0x73) // 'f' (avif) or 's' (avis)
   );
 }
 
