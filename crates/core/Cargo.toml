@@ -6,23 +6,42 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = ["native"]
+# Códecs C de máxima calidad + paralelismo (build nativo)
+native = [
+  "dep:mozjpeg",
+  "dep:libwebp-sys2",
+  "dep:avif-decode",
+  "oxipng/parallel",
+  "quantette/threads",
+  "ravif/asm",
+  "ravif/threading",
+]
+# Perfil puro-Rust para wasm32 (fallbacks documentados; ver plan M2)
+wasm = ["dep:jpeg-encoder"]
+
 [dependencies]
 thiserror = "2"
 png = "0.18"
-oxipng = { version = "10", default-features = false, features = ["parallel", "zopfli"] }
-quantette = { version = "0.6", features = ["threads"] }
+oxipng = { version = "10", default-features = false, features = ["zopfli"] }
+quantette = { version = "0.6", default-features = false, features = ["kmeans", "std"] }
 zune-jpeg = "0.5"
 zune-core = "0.5"
-mozjpeg = "0.10"
+mozjpeg = { version = "0.10", optional = true }
 image-webp = "0.2"
-libwebp-sys2 = { version = "0.2", features = ["1_2", "static"] }
-ravif = { version = "0.13", default-features = false, features = ["threading", "asm"] }
-avif-decode = "1"
+libwebp-sys2 = { version = "0.2", features = ["1_2", "static"], optional = true }
+ravif = { version = "0.13", default-features = false }
+avif-decode = { version = "1", optional = true }
 rgb = { version = "0.8", features = ["bytemuck"] }
 imgref = "1"
 bytemuck = "1"
 avif-parse = "1"
 moxcms = "0.8.1"
+jpeg-encoder = { version = "0.7", features = ["std"], optional = true }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+oxipng = { version = "10", default-features = false, features = ["zopfli", "freestanding"] }
 
 [dev-dependencies]
 jpeg-encoder = "0.7"

@@ -1,4 +1,4 @@
-//! JPEG: decode con zune-jpeg normalizado a RGBA8; encode via mozjpeg.
+//! JPEG: decode con zune-jpeg normalizado a RGBA8; encode via mozjpeg (native) o jpeg-encoder (wasm).
 use crate::codecs::{ImageDecoder, ImageEncoder};
 use crate::error::Error;
 use crate::format::Format;
@@ -61,6 +61,7 @@ impl ImageDecoder for JpegCodec {
     }
 }
 
+#[cfg(feature = "native")]
 impl ImageEncoder for JpegCodec {
     fn encode(&self, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>, Error> {
         if opts.lossless {
@@ -96,6 +97,33 @@ impl ImageEncoder for JpegCodec {
             )
         })?
         .map_err(encode_err)
+    }
+}
+
+#[cfg(all(feature = "wasm", not(feature = "native")))]
+impl ImageEncoder for JpegCodec {
+    fn encode(&self, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>, Error> {
+        if opts.lossless {
+            return Err(Error::InvalidOptions(
+                "JPEG does not support lossless".into(),
+            ));
+        }
+        // Fallback wasm documentado: jpeg-encoder (puro Rust, sin trellis →
+        // menor densidad que mozjpeg; ver plan M2 / README).
+        let rgb = img.to_rgb_over_white();
+        let mut out = Vec::new();
+        let mut enc = jpeg_encoder::Encoder::new(&mut out, opts.quality);
+        if opts.jpeg_progressive {
+            enc.set_progressive(true);
+        }
+        enc.encode(
+            &rgb,
+            u16::try_from(img.width).map_err(encode_err)?,
+            u16::try_from(img.height).map_err(encode_err)?,
+            jpeg_encoder::ColorType::Rgb,
+        )
+        .map_err(encode_err)?;
+        Ok(out)
     }
 }
 
@@ -151,6 +179,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn encode_decode_roundtrip_aproximado() {
         let img = crate::testutil::vector_gradient_circle(32, 24);
@@ -161,6 +190,7 @@ mod tests {
         assert_eq!((back.width, back.height), (32, 24));
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn quality_menor_da_menos_bytes() {
         let img = crate::testutil::vector_gradient_circle(64, 64);
