@@ -16,3 +16,20 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  node-binding:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: ilammy/setup-nasm@v1
+        with: { version: "2.16.03" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install
+        working-directory: crates/node
+      - run: npm run build
+        working-directory: crates/node
+      - run: npm test
+        working-directory: crates/node
