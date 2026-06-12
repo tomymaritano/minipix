@@ -1,0 +1,474 @@
+# Release pipeline: one tag → npm (napi-rs) + PyPI (maturin) + crates.io
+#
+# Trigger: push of a "v*" tag (e.g. v0.1.0)
+#
+# Secrets required:
+#   NPM_TOKEN   — npm publish token (Automation type)
+#   CRATES_TOKEN — crates.io API token (cargo publish)
+#
+# PyPI uses trusted publishing (OIDC id-token) — no secret needed,
+# but the project must be pre-registered at https://pypi.org/manage/account/publishing/
+#
+# NOTE: No GitHub remote exists yet; this workflow is structurally validated locally.
+# Live dry-run happens at first push (known gap — not blocking authoring).
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write # Required for PyPI trusted publishing (OIDC)
+
+# ---------------------------------------------------------------------------
+# 0. Version coherence guard
+#    Asserts that the git tag matches workspace Cargo.toml version AND
+#    crates/node/package.json version. Fail fast before any expensive build.
+# ---------------------------------------------------------------------------
+jobs:
+  check-versions:
+    name: check-versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract tag version (strip leading "v")
+        run: echo "TAG_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Verify Cargo workspace version matches tag
+        run: |
+          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*= *"\(.*\)"/\1/')
+          echo "Cargo version: $CARGO_VERSION / Tag version: $TAG_VERSION"
+          if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Cargo.toml version ($CARGO_VERSION) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+      - name: Verify package.json version matches tag
+        run: |
+          PKG_VERSION=$(node -e "console.log(require('./crates/node/package.json').version)")
+          echo "package.json version: $PKG_VERSION / Tag version: $TAG_VERSION"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::crates/node/package.json version ($PKG_VERSION) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+        env:
+          TAG_VERSION: ${{ env.TAG_VERSION }}
+
+  # -------------------------------------------------------------------------
+  # 1. npm: build native .node binaries for 5 targets
+  #    Matrix: win-x64 | mac-arm64 | mac-x64 | linux-x64-gnu | linux-arm64-gnu
+  #
+  #    Each job:  checkout → rust toolchain → cache → nasm 2.16.03 → cmake
+  #               (present on all hosted runners) → node 22 → npm ci →
+  #               napi build → upload .node artifact
+  # -------------------------------------------------------------------------
+  npm-build:
+    name: npm-build (${{ matrix.target }})
+    needs: check-versions
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --- Windows x64 ---
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            napi_target: x86_64-pc-windows-msvc
+
+          # --- macOS Apple Silicon (arm64) ---
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            napi_target: aarch64-apple-darwin
+
+          # --- macOS Intel (x64) ---
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            napi_target: x86_64-apple-darwin
+
+          # --- Linux x64 GNU ---
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            napi_target: x86_64-unknown-linux-gnu
+
+          # --- Linux arm64 GNU (native arm runner; GA since 2025) ---
+          # No cross-compilation pain with C deps (libaom, libwebp-sys2)
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            napi_target: aarch64-unknown-linux-gnu
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.napi_target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: napi-${{ matrix.target }}
+
+      # CRITICAL: pin nasm to 2.16.03 — 3.x breaks libaom cmake feature-detection
+      # (the cmake help-text parsing in libaom fails with nasm 3.x output format)
+      - name: Setup nasm 2.16.03
+        uses: ilammy/setup-nasm@v1
+        with:
+          version: "2.16.03"
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: crates/node/package-lock.json
+
+      - name: Install npm dependencies
+        run: npm ci
+        working-directory: crates/node
+
+      - name: Build native addon
+        # --target: cross-compile / native triple
+        # --release: optimised build
+        # --platform: napi v3 flag that writes <name>.<target>.node
+        run: npx napi build --platform --release --target ${{ matrix.napi_target }}
+        working-directory: crates/node
+
+      - name: Upload .node artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # Artifact name must be unique per target and consistent with npm-publish
+          name: napi-bindings-${{ matrix.target }}
+          path: crates/node/*.node
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
+  # 2. npm: collect artifacts → napi artifacts → npm publish
+  #    Requires: NPM_TOKEN secret
+  # -------------------------------------------------------------------------
+  npm-publish:
+    name: npm-publish
+    needs: npm-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install npm dependencies
+        run: npm ci
+        working-directory: crates/node
+
+      # Download all .node artifacts from the matrix builds
+      - name: Download all napi artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: napi-bindings-*
+          path: crates/node/artifacts
+          merge-multiple: true
+
+      # napi artifacts: moves .node files from artifacts/ into the platform-specific
+      # npm package directories (e.g. npm/win32-x64-msvc/minipix.win32-x64-msvc.node)
+      # This command reads napi.targets from package.json to know which subdirs to create.
+      - name: Collect artifacts into npm package dirs
+        run: npm run artifacts
+        working-directory: crates/node
+
+      # napi prepublish: updates package.json optionalDependencies to point to the
+      # platform sub-packages; also generates the top-level index.js loader.
+      # -t npm: output directory is npm/ (matches the convention)
+      - name: Prepublish (update optionalDependencies)
+        run: npx napi prepublish -t npm
+        working-directory: crates/node
+
+      # Publish each platform sub-package first, then the main package.
+      # --access public: required for scoped packages on npm free tier.
+      # NPM_TOKEN: create an "Automation" token at npmjs.com → Account → Access Tokens
+      - name: Publish platform packages
+        run: |
+          for dir in npm/*/; do
+            echo "Publishing $dir"
+            npm publish "$dir" --access public
+          done
+        working-directory: crates/node
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish main package
+        run: npm publish --access public
+        working-directory: crates/node
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # -------------------------------------------------------------------------
+  # 3. Python wheels (maturin) — adapted from `maturin generate-ci github`
+  #    v1 targets: linux x64 + arm64 (manylinux), musl x64, macOS x64 + arm64,
+  #                Windows x64
+  #
+  #    abi3: pyo3 uses abi3-py39 feature → single wheel works for Python ≥3.9
+  #    before-script-linux: installs nasm 2.16.03 in manylinux containers
+  #    (the bundled nasm in manylinux_2_28 may be too old or absent)
+  # -------------------------------------------------------------------------
+  wheels-linux:
+    name: wheels-linux (${{ matrix.platform.target }})
+    needs: check-versions
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          # x64 — standard manylinux container via QEMU or native
+          - runner: ubuntu-latest
+            target: x86_64
+            manylinux: auto
+
+          # arm64 — native arm runner (faster than QEMU on ubuntu-latest)
+          - runner: ubuntu-24.04-arm
+            target: aarch64
+            manylinux: manylinux_2_28
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheels (manylinux)
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: crates/python
+          target: ${{ matrix.platform.target }}
+          args: --release --out ../../dist --features pyo3/abi3-py39
+          manylinux: ${{ matrix.platform.manylinux }}
+          # CRITICAL: nasm 2.16.03 must be installed in the manylinux container.
+          # The container's default nasm (if present) may be 2.15 or older which
+          # triggers an assertion in libaom's cmake checks.
+          # before-script-linux runs inside the manylinux container before the build.
+          before-script-linux: |
+            # Install nasm 2.16.03 from source (yum nasm is typically 2.15.x)
+            # Also ensure cmake and perl are available (needed by libaom and libwebp-sys2)
+            if command -v yum &>/dev/null; then
+              yum install -y cmake perl-IPC-Cmd perl-File-Temp || true
+            elif command -v apt-get &>/dev/null; then
+              apt-get install -y cmake perl || true
+            fi
+            # Build nasm from source if the version is < 2.16
+            NASM_VER=$(nasm --version 2>/dev/null | awk '{print $3}' || echo "0.0.0")
+            if [[ "$NASM_VER" < "2.16" ]]; then
+              echo "nasm $NASM_VER is too old, building 2.16.03 from source..."
+              curl -fsSL https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/nasm-2.16.03.tar.gz | tar xz
+              pushd nasm-2.16.03 && ./configure && make -j$(nproc) && make install && popd
+              rm -rf nasm-2.16.03
+            fi
+            nasm --version
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.platform.target }}
+          path: dist
+          if-no-files-found: error
+
+  wheels-musl:
+    name: wheels-musl (x86_64)
+    needs: check-versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheels (musllinux x86_64)
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: crates/python
+          target: x86_64
+          args: --release --out ../../dist --features pyo3/abi3-py39
+          manylinux: musllinux_1_2
+          # Same nasm guard for musl container
+          before-script-linux: |
+            NASM_VER=$(nasm --version 2>/dev/null | awk '{print $3}' || echo "0.0.0")
+            if [[ "$NASM_VER" < "2.16" ]]; then
+              echo "nasm $NASM_VER is too old, building 2.16.03 from source..."
+              curl -fsSL https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/nasm-2.16.03.tar.gz | tar xz
+              pushd nasm-2.16.03 && ./configure && make -j$(nproc) && make install && popd
+              rm -rf nasm-2.16.03
+            fi
+            nasm --version
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-musl-x86_64
+          path: dist
+          if-no-files-found: error
+
+  wheels-macos:
+    name: wheels-macos (${{ matrix.platform.target }})
+    needs: check-versions
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: macos-13
+            target: x86_64
+          - runner: macos-latest
+            target: aarch64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # macOS hosted runners ship cmake and perl. Pin nasm to 2.16.03.
+      - name: Setup nasm 2.16.03
+        uses: ilammy/setup-nasm@v1
+        with:
+          version: "2.16.03"
+
+      - name: Build wheels (macOS)
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: crates/python
+          target: ${{ matrix.platform.target }}
+          args: --release --out ../../dist --features pyo3/abi3-py39
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.platform.target }}
+          path: dist
+          if-no-files-found: error
+
+  wheels-windows:
+    name: wheels-windows (x64)
+    needs: check-versions
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+
+      # Windows hosted runner ships cmake and perl (StrawberryPerl).
+      - name: Setup nasm 2.16.03
+        uses: ilammy/setup-nasm@v1
+        with:
+          version: "2.16.03"
+
+      - name: Build wheels (Windows x64)
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: crates/python
+          target: x64
+          args: --release --out ../../dist --features pyo3/abi3-py39
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-x64
+          path: dist
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
+  # 4. Python sdist
+  # -------------------------------------------------------------------------
+  sdist:
+    name: sdist
+    needs: check-versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: crates/python
+          command: sdist
+          args: --out ../../dist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
+  # 5. PyPI publish (trusted publishing via OIDC — no secret needed)
+  #
+  #    Option A (active): pypa/gh-action-pypi-publish with trusted publishing
+  #      → pre-register at https://pypi.org/manage/account/publishing/
+  #        Publisher: GitHub Actions, repo: <owner>/<repo>, workflow: release.yml
+  #
+  #    Option B (fallback, commented out): pass PYPI_API_TOKEN secret
+  #      Uncomment the `password` field and add secret PYPI_API_TOKEN.
+  # -------------------------------------------------------------------------
+  pypi-publish:
+    name: pypi-publish
+    needs: [wheels-linux, wheels-musl, wheels-macos, wheels-windows, sdist]
+    runs-on: ubuntu-latest
+    # id-token: write is inherited from top-level permissions (trusted publishing)
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          # Option B fallback (comment out trusted publishing above and uncomment):
+          # password: ${{ secrets.PYPI_API_TOKEN }}
+
+  # -------------------------------------------------------------------------
+  # 6. crates.io publish
+  #    Publishes only minipix-core (the library crate; bindings are publish=false)
+  #    CRATES_TOKEN secret: generate at https://crates.io/settings/tokens
+  #    (select "publish-new" + "publish-update" scopes)
+  #
+  #    cargo publish verifies the crate builds (including C deps), so nasm pin
+  #    is required here too.
+  # -------------------------------------------------------------------------
+  crates-io:
+    name: crates-io
+    needs: check-versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: crates-io
+
+      # CRITICAL: libaom needs nasm 2.16.03 at publish time (cargo publish compiles)
+      - name: Setup nasm 2.16.03
+        uses: ilammy/setup-nasm@v1
+        with:
+          version: "2.16.03"
+
+      - name: Publish minipix-core to crates.io
+        # --no-verify skips the test build inside a temp dir (already tested in CI)
+        # Remove --no-verify if you want the extra safety net (slower)
+        run: cargo publish -p minipix-core --token ${{ secrets.CRATES_TOKEN }}
