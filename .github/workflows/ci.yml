@@ -1,0 +1,53 @@
+name: ci
+on:
+  push: { branches: [master, develop] }
+  pull_request:
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "clippy, rustfmt" }
+      - uses: Swatinem/rust-cache@v2
+      - uses: ilammy/setup-nasm@v1
+        with: { version: "2.16.03" } # 3.x rompe el check de cmake de libaom (texto de ayuda -Ox)
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  node-binding:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: ilammy/setup-nasm@v1
+        with: { version: "2.16.03" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: crates/node
+      - run: npm run build
+        working-directory: crates/node
+      - run: npm test
+        working-directory: crates/node
+
+  python-binding:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: ilammy/setup-nasm@v1
+        with: { version: "2.16.03" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      # maturin develop requires an active venv on CI; use build + install wheel instead.
+      - run: pip install maturin pytest
+      - run: maturin build --release -o ../../dist
+        working-directory: crates/python
+      - run: pip install dist/minipix-*.whl
+      - run: pytest tests/ -v
+        working-directory: crates/python

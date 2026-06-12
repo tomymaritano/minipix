@@ -1,0 +1,40 @@
+[package]
+name = "minipix-core"
+description = "Image compression/conversion core: PNG, JPEG, WebP, AVIF"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror = "2"
+png = "0.18"
+oxipng = { version = "10", default-features = false, features = ["parallel", "zopfli"] }
+quantette = { version = "0.6", features = ["threads"] }
+zune-jpeg = "0.5"
+zune-core = "0.5"
+mozjpeg = "0.10"
+image-webp = "0.2"
+libwebp-sys2 = { version = "0.2", features = ["1_2", "static"] }
+ravif = { version = "0.13", default-features = false, features = ["threading", "asm"] }
+avif-decode = "1"
+rgb = { version = "0.8", features = ["bytemuck"] }
+imgref = "1"
+bytemuck = "1"
+avif-parse = "1"
+moxcms = "0.8.1"
+
+[dev-dependencies]
+jpeg-encoder = "0.7"
+png = "0.18"
+sha2 = "0.10"
+hex = "0.4"
+serde_json = "1"
+criterion = "0.5"
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "codecs"
+harness = false

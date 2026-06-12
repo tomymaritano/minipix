@@ -1,0 +1,29 @@
+{
+  "name": "minipix",
+  "version": "0.1.0",
+  "description": "Image compression and conversion: PNG, JPEG, WebP, AVIF. One Rust core, same bytes everywhere.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT OR Apache-2.0",
+  "engines": { "node": ">= 18" },
+  "napi": {
+    "binaryName": "minipix",
+    "targets": [
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin"
+    ]
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "test": "node tests/smoke.mjs",
+    "artifacts": "napi artifacts",
+    "prepublishOnly": "napi prepublish -t npm"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  }
+}

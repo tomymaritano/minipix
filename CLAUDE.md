@@ -5,10 +5,16 @@ SDK de compresión/conversión de imágenes (PNG, JPEG, WebP, AVIF) con core en 
 ## Reglas de arquitectura (duras)
 
 1. **Toda la lógica vive en `crates/core`.** Los bindings (`node`, `python`, `wasm`) solo convierten tipos, errores y manejan async. Si un binding necesita un `if` de negocio, ese `if` va al core.
-2. **Códecs solo detrás de los traits `Decoder`/`Encoder`** contra `DecodedImage`. Nada fuera de `crates/core/src/codecs/` llama a un crate de códec directamente.
+2. **Códecs solo detrás de los traits `ImageDecoder`/`ImageEncoder`** contra `DecodedImage`. Nada fuera de `crates/core/src/codecs/` llama a un crate de códec directamente.
 3. **Paridad byte a byte entre bindings nativos** es promesa contractual. Cualquier cambio que altere bytes de salida regenera los goldens de forma explícita y se justifica en el PR (tolerancias: SSIM −0.005 / tamaño +3%, spec §9).
 4. **Ningún pánico cruza la FFI**: `catch_unwind` en el borde de cada binding. Un pánico se reporta como error interno, jamás aborta el proceso anfitrión.
-5. **Árbol de licencias permisivo** (MIT/Apache/BSD/Zlib/IJG). Nada GPL/LGPL/AGPL — lo aplica `cargo deny check` en CI; no agregar excepciones a `deny.toml` sin discutirlo primero.
+5. **Árbol de licencias permisivo** (MIT/Apache/BSD/Zlib/IJG/NCSA). Nada GPL/LGPL/AGPL — lo aplica `cargo deny check` en CI; no agregar excepciones a `deny.toml` sin discutirlo primero. Excepción documentada: MPL-2.0 (avif-parse, copyleft débil a nivel de archivo — no modificamos el crate; ver deny.toml).
+
+## Git flow
+
+- `master`: solo releases (merge desde `develop` + tag `vX.Y.Z` que dispara el pipeline de publicación).
+- `develop`: rama de integración — todo feature mergea acá primero.
+- Features: `feat/<nombre>` desde `develop`; fixes: `fix/<nombre>`. Commits frecuentes, CI verde antes de mergear.
 
 ## Principios
 

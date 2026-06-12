@@ -3,12 +3,16 @@ target/
 
 # Node
 node_modules/
-dist/
 
 # Python
 __pycache__/
 *.egg-info/
 .venv/
+dist/
+.pytest_cache/
+
+# Config local de sesión (nunca commitear)
+.claude/settings.local.json
 
 # Artefactos de bindings
 *.node

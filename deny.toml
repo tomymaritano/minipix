@@ -1,6 +1,5 @@
 # cargo-deny: aplica la política de licencias del spec (§3) y advisories de seguridad.
-# Ajustar la lista en el primer `cargo deny check` real del workspace (M1),
-# pero NUNCA agregar licencias copyleft (GPL/LGPL/AGPL) sin discusión explícita.
+# NUNCA agregar licencias copyleft fuerte (GPL/LGPL/AGPL) sin discusión explícita.
 
 [licenses]
 allow = [
@@ -11,11 +10,18 @@ allow = [
   "BSD-3-Clause",
   "ISC",
   "Zlib",
-  "IJG",            # mozjpeg crate
+  "IJG",          # mozjpeg crate
   "Unicode-3.0",
-  "Unicode-DFS-2016",
   "CC0-1.0",
-  "BSL-1.0",
+  # --- Excepciones documentadas (review final M1, 2026-06-12) ---
+  # MPL-2.0: avif-parse (parser del contenedor AVIF, directo y vía avif-decode).
+  # Copyleft DÉBIL a nivel de archivo: no modificamos el crate, así que la única
+  # obligación es preservar la disponibilidad de SU código fuente (cumplida por
+  # crates.io). Compatible con distribuir minipix bajo MIT/Apache. No es GPL/LGPL/AGPL.
+  "MPL-2.0",
+  # NCSA: libfuzzer-sys (transitiva de rav1e). Licencia PERMISIVA (híbrido MIT/BSD,
+  # aprobada por OSI). Solo aparece en el grafo por features de rav1e; no copyleft.
+  "NCSA",
 ]
 
 [bans]
@@ -24,6 +30,16 @@ wildcards = "deny"
 
 [advisories]
 yanked = "deny"
+ignore = [
+  # owning_ref 0.4.1 (vía avif-decode): soundness advisory por patrones de mal uso
+  # de su API; sin upgrade seguro disponible. avif-decode lo usa internamente con
+  # patrones fijos; riesgo evaluado como bajo. Backlog: empujar upstream a
+  # reemplazarlo o migrar de avif-decode. (Review final M1.)
+  "RUSTSEC-2022-0040",
+  # paste 1.0.15 (vía rav1e): proc-macro sin mantenimiento, solo build-time,
+  # no llega al binario final. Riesgo bajo. (Review final M1.)
+  "RUSTSEC-2024-0436",
+]
 
 [sources]
 unknown-registry = "deny"

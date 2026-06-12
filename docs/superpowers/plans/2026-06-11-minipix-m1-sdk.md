@@ -12,6 +12,7 @@
 
 1. `keepMetadata` se difiere a v2: png 0.18 no expone escritura de iCCP y ravif no embebe ICC. En v1 el color se resuelve convirtiendo a sRGB al decodificar (ICC se *aplica*, nunca se rompe) y EXIF/XMP siempre se elimina.
 2. AVIF decode: `avif-decode` (kornelski) envuelve **aom-decode/libaom**, no dav1d — reutiliza el toolchain cmake+nasm que ya exigen mozjpeg/libwebp (no suma meson). Es el camino elegido; `rav1d` queda como swap futuro.
+3. **Trait `ImageDecoder` recibe `max_pixels`** (review de Task 6): `decode(&self, data: &[u8], max_pixels: u64)`. Cada decoder valida dimensiones tan temprano como su API lo permite y devuelve `LimitExceeded` ANTES de asignar el buffer de salida (defensa contra bombas de dimensiones aun si un caller futuro saltea el `peek` del Task 15, p.ej. fuzz targets). El `peek` del Task 15 se mantiene como capa rápida. Los snippets de las Tasks 7-13 y 15 se adaptan a la nueva firma.
 
 **Convención de cada tarea:** TDD — test primero, ver que falla, implementar mínimo, ver que pasa, commit. Comandos desde la raíz del repo. `cargo test -p minipix-core` corre los tests del core.
 
@@ -2440,3 +2441,7 @@ Run: `cargo bench -p minipix-core` → reporta tiempos (informativo).
 - [ ] Pánicos en bindings: napi-rs y PyO3 ya convierten panics de Rust en Error/PanicException en el borde — verificado por los tests de errores tipados; el único productor interno de unwinds (mozjpeg) se contiene en el core (Task 9).
 
 **Backlog inmediato post-M1** (spec §9.4, no bloquea el release): fuzzing con cargo-fuzz sobre `sniff`, `peek_dimensions` y los wrappers de decode (requiere nightly; job de CI separado).
+
+**Backlog del review de Task 2**: ampliar detección AVIF a `compatible_brands` del ftyp (hoy solo major brand: AVIFs con major `mif1`/`msf1` se rechazan) — hacerlo antes de v1.0 final.
+**Backlog del review de Task 13**: (a) fixture AVIF 10-bit/grayscale para cubrir las variantes 16-bit del normalizador; (b) avif-decode `unprem` tiene una fórmula dudosa para alpha premultiplicado — verificar upstream antes de v1.0 (los AVIF premultiplicados podrían decodificar colores incorrectos).
+**Backlog del review de Task 14**: (a) moxcms despacha SIMD en runtime (AVX512/AVX2/SSE4.1) — si se agregan vectores golden CON ICC, validar estabilidad cross-CPU o fijar camino escalar; (b) AVIF con ICC embebido (colr prof) no se normaliza a sRGB en v1; (c) cache de transform para batch (no relevante con un decode por imagen); (d) short-circuit sRGB pendiente — `ColorProfile` no implementa `PartialEq` en moxcms 0.8 y comparar primaries/white-point dentro de epsilon serían >20 líneas de float frágil; diferir hasta que moxcms exponga `PartialEq` o un helper `is_srgb()`.
