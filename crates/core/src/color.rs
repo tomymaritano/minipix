@@ -15,21 +15,26 @@ use moxcms::{ColorProfile, Layout, TransformOptions};
 
 /// Aplica `profile` como espacio de origen, convirtiendo `rgba` (RGBA8) a sRGB in-place.
 ///
-/// La API de moxcms no transforma in-place, por lo que se usa un buffer temporal.
+/// La transformación escribe en un buffer temporal; los píxeles originales se
+/// sobreescriben **sólo si el transform tiene éxito**. Ante CUALQUIER error los
+/// píxeles quedan intactos.
 pub(crate) fn apply_profile_to_srgb(rgba: &mut [u8], profile: &ColorProfile) -> Result<(), Error> {
-    let dst = ColorProfile::new_srgb();
+    let dst_profile = ColorProfile::new_srgb();
     let transform = profile
         .create_transform_8bit(
             Layout::Rgba,
-            &dst,
+            &dst_profile,
             Layout::Rgba,
             TransformOptions::default(),
         )
         .map_err(|e| Error::IccTransform(e.to_string()))?;
     let src = rgba.to_vec();
+    let mut dst = vec![0u8; rgba.len()];
     transform
-        .transform(&src, rgba)
-        .map_err(|e| Error::IccTransform(e.to_string()))
+        .transform(&src, &mut dst)
+        .map_err(|e| Error::IccTransform(e.to_string()))?;
+    rgba.copy_from_slice(&dst);
+    Ok(())
 }
 
 /// Parsea un blob ICC crudo y aplica la conversión a sRGB sobre `rgba` (RGBA8).
@@ -99,6 +104,20 @@ mod tests {
         let mut pixels = vec![1u8, 2, 3, 255];
         assert!(apply_icc_to_srgb(&mut pixels, b"not an icc profile").is_err());
         assert_eq!(pixels, vec![1, 2, 3, 255]);
+    }
+
+    #[test]
+    fn p3_color_en_gamut_cambia_numericamente() {
+        let p3 = moxcms::ColorProfile::new_display_p3();
+        let mut pixels = vec![200u8, 100, 50, 255]; // naranja moderado, dentro de ambos gamuts
+        let orig = pixels.clone();
+        super::apply_profile_to_srgb(&mut pixels, &p3).unwrap();
+        assert_ne!(
+            &pixels[..3],
+            &orig[..3],
+            "el transform debe cambiar valores: {pixels:?}"
+        );
+        assert_eq!(pixels[3], 255);
     }
 
     #[test]
