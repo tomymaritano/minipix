@@ -17,6 +17,7 @@ mozjpeg = "0.10"
 image-webp = "0.2"
 libwebp-sys2 = { version = "0.2", features = ["1_2", "static"] }
 ravif = { version = "0.13", default-features = false, features = ["threading", "asm"] }
+avif-decode = "1"
 rgb = { version = "0.8", features = ["bytemuck"] }
 imgref = "1"
 bytemuck = "1"
