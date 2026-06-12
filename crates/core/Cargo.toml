@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 thiserror = "2"
+png = "0.18"
 
 [lints]
 workspace = true

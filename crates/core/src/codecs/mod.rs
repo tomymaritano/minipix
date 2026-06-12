@@ -3,6 +3,8 @@ use crate::error::Error;
 use crate::image::DecodedImage;
 use crate::options::Options;
 
+pub(crate) mod png;
+
 /// Decodifica bytes del formato a RGBA8 sRGB.
 #[allow(dead_code)] // usado por los códecs (Tasks 6-13)
 pub(crate) trait ImageDecoder {
@@ -10,7 +12,7 @@ pub(crate) trait ImageDecoder {
 }
 
 /// Codifica RGBA8 sRGB a bytes del formato según `Options`.
-#[allow(dead_code)] // usado por los códecs (Tasks 6-13)
+#[allow(dead_code)] // usado por los códecs (Tasks 7-13)
 pub(crate) trait ImageEncoder {
     fn encode(&self, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>, Error>;
 }
