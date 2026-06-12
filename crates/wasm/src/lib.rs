@@ -113,6 +113,7 @@ pub struct WasmOutput {
 #[wasm_bindgen]
 impl WasmOutput {
     /// Encoded image bytes (returned as `Uint8Array` in JS).
+    /// NOTA: cada lectura de .data copia el buffer — leer UNA vez y transferir.
     #[must_use]
     #[wasm_bindgen(getter)]
     pub fn data(&self) -> Vec<u8> {
