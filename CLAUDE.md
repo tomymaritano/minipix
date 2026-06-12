@@ -48,3 +48,4 @@ Cero warnings en `main`. Un warning nuevo es un fallo de CI, no una advertencia.
 - TDD: test primero, implementación después (skill `superpowers:test-driven-development`).
 - Todo cambio en `crates/core/src/codecs/` corre la suite de conformance contra los vectores de `tests/vectors/`.
 - Los benchmarks (criterion) no bloquean CI pero acompañan cualquier PR que afirme una mejora de rendimiento.
+- Goldens: regenerar nativos con `MINIPIX_REGEN_GOLDENS=1 cargo test -p minipix-core --test conformance`; los wasm (webp lossless) con `crates/wasm/build-node-test.ps1` + `MINIPIX_REGEN_WASM_GOLDENS=1 node crates/wasm/tests/smoke.mjs`. Ambos cambios se justifican en el PR.

@@ -93,8 +93,7 @@ for (const vector of ['gradient_circle', 'flat_colors']) {
     console.log(`[OK] ${vector} webp lossless: wasm golden match`);
   } else {
     // goldens-wasm.json existe pero falta esta clave → REGEN pendiente
-    assert.ok(webp.bytesOut > 0, `${vector} webp lossless wasm sanity`);
-    console.log(`[WARN] ${vector} webp lossless: golden-wasm no encontrado, sanity only`);
+    assert.fail(`clave ${vector}.convert.webp.lossless ausente en goldens-wasm.json — regenerar con MINIPIX_REGEN_WASM_GOLDENS=1`);
   }
 
   // encodeRgba:

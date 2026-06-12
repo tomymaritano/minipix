@@ -63,7 +63,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      # clang needed for oxipng freestanding (available on ubuntu runners)
+      - run: which clang # oxipng/freestanding compila libdeflate C con clang
       # wasm-bindgen-cli: pinned to match crate version 0.2.123
       - name: Install wasm-bindgen-cli
         run: cargo install wasm-bindgen-cli --version 0.2.123 --locked
