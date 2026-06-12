@@ -1,0 +1,16 @@
+//! Códecs por formato, detrás de traits contra `DecodedImage`.
+use crate::error::Error;
+use crate::image::DecodedImage;
+use crate::options::Options;
+
+/// Decodifica bytes del formato a RGBA8 sRGB.
+#[allow(dead_code)] // usado por los códecs (Tasks 6-13)
+pub(crate) trait ImageDecoder {
+    fn decode(&self, data: &[u8]) -> Result<DecodedImage, Error>;
+}
+
+/// Codifica RGBA8 sRGB a bytes del formato según `Options`.
+#[allow(dead_code)] // usado por los códecs (Tasks 6-13)
+pub(crate) trait ImageEncoder {
+    fn encode(&self, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>, Error>;
+}

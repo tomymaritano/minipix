@@ -79,6 +79,9 @@ mod tests {
         // alpha 0 => blanco puro; alpha 255 => color intacto
         let img = img_2x1([[200, 0, 0, 255], [200, 0, 0, 0]]);
         assert_eq!(img.to_rgb_over_white(), vec![200, 0, 0, 255, 255, 255]);
+        // alpha medio: fija el contrato de truncamiento (no round-half).
+        let mid = img_2x1([[200, 0, 0, 128], [0, 0, 0, 255]]);
+        assert_eq!(&mid.to_rgb_over_white()[0..3], &[227, 127, 127]);
     }
 
     #[test]

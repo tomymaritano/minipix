@@ -45,7 +45,18 @@
       "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cd \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; cargo clippy --workspace --all-targets -- -D warnings 2>&1)",
       "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cd \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; cargo fmt --check 2>&1)",
       "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cd \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; cargo test -p minipix-core 2>&1)",
-      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cd \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; git add -A; if \\($?\\) { git commit -m \"feat\\(core\\): DecodedImage RGBA8 + composicion sobre blanco\" })"
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cd \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; git add -A; if \\($?\\) { git commit -m \"feat\\(core\\): DecodedImage RGBA8 + composicion sobre blanco\" })",
+      "Bash(awk '/### Task 4:/,/### Task 5:/' \"docs/superpowers/plans/2026-06-11-minipix-m1-sdk.md\")",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cargo test -p minipix-core 2>&1 | Select-Object -Last 30)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cargo clippy --workspace --all-targets -- -D warnings 2>&1 | Select-Object -Last 20)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cargo fmt --check 2>&1 | Select-Object -Last 10; \"FMT_EXIT=$LASTEXITCODE\")",
+      "Bash(python3 -)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\" -Recurse -Depth 2)",
+      "Bash(Select-Object FullName)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location -Path \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; cargo test -p minipix-core 2>&1)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location -Path \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; cargo clippy --workspace --all-targets -- -D warnings 2>&1)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location -Path \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; cargo fmt --check 2>&1)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location -Path \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; git status 2>&1)"
     ]
   }
 }
