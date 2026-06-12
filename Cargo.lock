@@ -624,6 +624,7 @@ name = "minipix-core"
 version = "0.1.0"
 dependencies = [
  "avif-decode",
+ "avif-parse 1.4.0",
  "bytemuck",
  "image-webp",
  "imgref",

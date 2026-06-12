@@ -2443,3 +2443,4 @@ Run: `cargo bench -p minipix-core` → reporta tiempos (informativo).
 **Backlog inmediato post-M1** (spec §9.4, no bloquea el release): fuzzing con cargo-fuzz sobre `sniff`, `peek_dimensions` y los wrappers de decode (requiere nightly; job de CI separado).
 
 **Backlog del review de Task 2**: ampliar detección AVIF a `compatible_brands` del ftyp (hoy solo major brand: AVIFs con major `mif1`/`msf1` se rechazan) — hacerlo antes de v1.0 final.
+**Backlog del review de Task 13**: (a) fixture AVIF 10-bit/grayscale para cubrir las variantes 16-bit del normalizador; (b) avif-decode `unprem` tiene una fórmula dudosa para alpha premultiplicado — verificar upstream antes de v1.0 (los AVIF premultiplicados podrían decodificar colores incorrectos).

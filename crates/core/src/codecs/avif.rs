@@ -69,11 +69,23 @@ use crate::codecs::ImageDecoder;
 
 impl ImageDecoder for AvifCodec {
     fn decode(&self, data: &[u8], max_pixels: u64) -> Result<DecodedImage, Error> {
-        // from_avif parses the AVIF container and decodes the AV1 frame(s).
-        // Dimensions are NOT exposed before to_image(); they become available
-        // inside to_image() after color conversion. The AV1 decode itself is
-        // unavoidable at this point — we check the pixel count immediately after
-        // to_image() returns, BEFORE allocating/converting to the final RGBA8 Vec.
+        // ANTI-BOMBA real: dimensiones del sequence header AV1 (OBU) vía avif-parse,
+        // SIN decodificar el frame. max_frame_* es el máximo de secuencia (cota
+        // superior conservadora del tamaño croppeado) — la dirección segura para un guard.
+        let mut cursor = std::io::Cursor::new(data);
+        let parsed = avif_parse::read_avif(&mut cursor).map_err(decode_err)?;
+        let meta = parsed.primary_item_metadata().map_err(decode_err)?;
+        let header_pixels =
+            u64::from(meta.max_frame_width.get()) * u64::from(meta.max_frame_height.get());
+        if header_pixels > max_pixels {
+            return Err(Error::LimitExceeded {
+                pixels: header_pixels,
+                limit: max_pixels,
+            });
+        }
+
+        // Decodifica el frame AV1 completo (color conversion incluida).
+        // A partir de aquí las dimensiones reales están disponibles.
         let decoder = avif_decode::Decoder::from_avif(data).map_err(decode_err)?;
         let image = decoder.to_image().map_err(decode_err)?;
 
@@ -87,10 +99,9 @@ impl ImageDecoder for AvifCodec {
             avif_decode::Image::Gray16(img) => (img.width(), img.height()),
         };
 
-        // ANTI-BOMBA: validate pixel count BEFORE building the RGBA8 output Vec.
-        // Note: the AV1 frame was already decoded by from_avif() — unavoidable
-        // with this API. The check here prevents us from allocating a second
-        // large buffer for images that exceed the configured limit.
+        // Belt-and-suspenders: el guard primario es el check pre-decode de arriba.
+        // Este segundo check cubre el caso (teórico) en que las dimensiones reales
+        // tras crop superen el header — no debería ocurrir, pero no cuesta nada.
         let pixels = w as u64 * h as u64;
         if pixels > max_pixels {
             return Err(Error::LimitExceeded {
@@ -106,6 +117,9 @@ impl ImageDecoder for AvifCodec {
         //   - Rgba16 → (channel >> 8) as u8
         //   - Gray8  → replicate to RGB, alpha 255
         //   - Gray16 → (channel >> 8) as u8, replicate to RGB, alpha 255
+        // w*h ya está acotado por max_pixels (guard de arriba); en 64-bit no
+        // puede desbordar. wasm32/32-bit queda cubierto porque max_pixels
+        // razonables (<2^30) mantienen w*h*4 < usize::MAX.
         let mut out: Vec<u8> = Vec::with_capacity(w * h * 4);
 
         match image {
@@ -169,6 +183,7 @@ impl ImageDecoder for AvifCodec {
     }
 }
 
+// Cobertura pendiente (backlog): variantes 16-bit y grayscale del normalizador (ravif solo encodea 8-bit; requiere fixture AVIF 10-bit).
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
