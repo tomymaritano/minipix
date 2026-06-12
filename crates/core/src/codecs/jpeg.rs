@@ -86,7 +86,12 @@ impl ImageEncoder for JpegCodec {
             started.write_scanlines(&rgb).map_err(|e| e.to_string())?;
             started.finish().map_err(|e| e.to_string())
         })
-        .map_err(|_| encode_err("mozjpeg aborted (internal libjpeg error)"))?
+        .map_err(|p| {
+            encode_err(
+                p.downcast_ref::<String>()
+                    .map_or("mozjpeg aborted (internal libjpeg error)", |s| s.as_str()),
+            )
+        })?
         .map_err(encode_err)
     }
 }

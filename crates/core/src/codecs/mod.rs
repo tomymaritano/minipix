@@ -5,6 +5,7 @@ use crate::options::Options;
 
 pub(crate) mod jpeg;
 pub(crate) mod png;
+pub(crate) mod webp;
 
 /// Decodifica bytes del formato a RGBA8 sRGB.
 ///
