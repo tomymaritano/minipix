@@ -79,6 +79,10 @@ fn encode(format: Format, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>,
 /// Caso de uso principal: el playground wasm alimenta imágenes decodificadas por el
 /// navegador (p.ej. AVIF). `bytes_in` reporta el tamaño del buffer RGBA de entrada.
 ///
+/// ADVERTENCIA: `bytes_in`/`ratio()` se calculan contra el buffer RGBA, NO contra
+/// el archivo original. Un binding que compara contra un archivo fuente DEBE
+/// sobreescribir ambos con el tamaño real del archivo (ver worker del playground).
+///
 /// # Errors
 /// `InvalidOptions` (buffer/opciones inválidas), `LimitExceeded`, `Encode`.
 pub fn encode_rgba(
