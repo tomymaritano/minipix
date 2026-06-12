@@ -89,12 +89,36 @@ fn invalid(e: impl std::fmt::Display) -> Error {
     Error::new(Status::InvalidArg, e.to_string())
 }
 
+/// Mapea un error del core a `napi::Error`.
+///
+/// CONTRATO PÚBLICO: el mensaje comienza con `[Código]` para que JS pueda
+/// distinguir variantes de forma estable. La razón: `Task::compute` está
+/// tipado como `Result<T, Error<Status>>` (el trait fija `S = Status`), por
+/// lo que no podemos usar un tipo S personalizado que llevaría el código como
+/// `err.code` directamente. En cambio usamos el prefijo `[Código]` en el
+/// mensaje, y documentamos que JS debe comprobar
+/// `err.message.startsWith('[Código]')`.
+///
+/// Las constantes de código son:
+/// * `UnsupportedFormat`
+/// * `DecodeError`
+/// * `EncodeError`
+/// * `InvalidOptions`
+/// * `LimitExceeded`
+/// * `IccTransform`
+/// * `Unknown`
 fn map_err(e: &minipix_core::Error) -> Error {
-    let status = match e {
-        minipix_core::Error::InvalidOptions(_) => Status::InvalidArg,
-        _ => Status::GenericFailure,
+    use minipix_core::Error as E;
+    let code = match e {
+        E::UnsupportedFormat => "UnsupportedFormat",
+        E::Decode { .. } => "DecodeError",
+        E::Encode { .. } => "EncodeError",
+        E::InvalidOptions(_) => "InvalidOptions",
+        E::LimitExceeded { .. } => "LimitExceeded",
+        E::IccTransform(_) => "IccTransform",
+        _ => "Unknown", // non_exhaustive guard
     };
-    Error::new(status, e.to_string())
+    Error::new(Status::GenericFailure, format!("[{code}] {e}"))
 }
 
 fn format_name(f: minipix_core::Format) -> &'static str {
@@ -106,6 +130,46 @@ fn format_name(f: minipix_core::Format) -> &'static str {
     }
 }
 
+/// Convierte `minipix_core::Output` en el objeto JS de resultado.
+fn make_output(out: minipix_core::Output) -> MinipixOutput {
+    #[allow(clippy::cast_precision_loss)] // tamaños de imagen << 2^52
+    MinipixOutput {
+        ratio: out.ratio(),
+        format: format_name(out.format).into(),
+        width: out.width,
+        height: out.height,
+        bytes_in: out.bytes_in as f64,
+        bytes_out: out.bytes_out as f64,
+        data: out.data.into(),
+    }
+}
+
+/// Ejecuta compress o convert con `catch_unwind` para que ningún pánico cruce la
+/// FFI hacia el threadpool de libuv (o el hilo JS en la variante síncrona).
+///
+/// `AssertUnwindSafe` está justificado: input y opts son sólo de lectura; si se
+/// produce un Err, el estado parcial se descarta con el closure.
+fn run_core(input: &[u8], opts: &minipix_core::Options, is_convert: bool) -> Result<MinipixOutput> {
+    let run = if is_convert {
+        minipix_core::convert
+    } else {
+        minipix_core::compress
+    };
+    // CLAUDE.md regla 4: ningún pánico cruza la FFI — contener aquí, en el
+    // borde real (threadpool de libuv + códecs C + input no confiable).
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(input, opts)))
+        .map_err(|p| {
+            let detail = p
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| p.downcast_ref::<&str>().copied())
+                .unwrap_or("internal panic in minipix core");
+            Error::new(Status::GenericFailure, format!("[InternalPanic] {detail}"))
+        })?
+        .map_err(|e| map_err(&e))
+        .map(make_output)
+}
+
 /// Trabajo CPU-bound ejecutado en el threadpool de libuv.
 pub struct Work {
     input: Vec<u8>,
@@ -114,29 +178,15 @@ pub struct Work {
 }
 
 impl Task for Work {
-    type Output = minipix_core::Output;
+    type Output = MinipixOutput;
     type JsValue = MinipixOutput;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        let run = if self.is_convert {
-            minipix_core::convert
-        } else {
-            minipix_core::compress
-        };
-        run(&self.input, &self.opts).map_err(|e| map_err(&e))
+        run_core(&self.input, &self.opts, self.is_convert)
     }
 
     fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {
-        #[allow(clippy::cast_precision_loss)] // tamaños de imagen << 2^52
-        Ok(MinipixOutput {
-            ratio: out.ratio(),
-            format: format_name(out.format).into(),
-            width: out.width,
-            height: out.height,
-            bytes_in: out.bytes_in as f64,
-            bytes_out: out.bytes_out as f64,
-            data: out.data.into(),
-        })
+        Ok(out)
     }
 }
 
@@ -168,4 +218,26 @@ pub fn convert(input: Buffer, options: MinipixOptions) -> Result<AsyncTask<Work>
         opts,
         is_convert: true,
     }))
+}
+
+/// Variante síncrona de compress (para scripts).
+///
+/// # Errors
+/// Returns an error if options are invalid or if the input cannot be decoded.
+#[napi]
+#[allow(clippy::needless_pass_by_value)] // napi-rs requiere Buffer/Option<T> por valor
+pub fn compress_sync(input: Buffer, options: Option<MinipixOptions>) -> Result<MinipixOutput> {
+    let opts = to_core_options(&options.unwrap_or_default())?;
+    run_core(&input, &opts, false)
+}
+
+/// Variante síncrona de convert (para scripts).
+///
+/// # Errors
+/// Returns an error if options are invalid, the format is unrecognized, or the input cannot be decoded.
+#[napi]
+#[allow(clippy::needless_pass_by_value)] // napi-rs requiere Buffer/MinipixOptions por valor
+pub fn convert_sync(input: Buffer, options: MinipixOptions) -> Result<MinipixOutput> {
+    let opts = to_core_options(&options)?;
+    run_core(&input, &opts, true)
 }
