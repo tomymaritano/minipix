@@ -10,4 +10,4 @@ license = "MIT OR Apache-2.0"
 dynamic = ["version"]
 
 [tool.maturin]
-include = [{ path = "minipix.pyi", format = "sdist" }]
+include = ["minipix.pyi"]
