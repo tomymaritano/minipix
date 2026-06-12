@@ -66,7 +66,7 @@ compressor/                  (repo)
 │   │   │   ├── sniff.rs     # detección de formato por magic bytes
 │   │   │   ├── image.rs     # DecodedImage: píxeles + alpha + ICC + metadata
 │   │   │   ├── error.rs     # enum de errores tipados
-│   │   │   └── codecs/      # un módulo por formato, contra traits Decoder/Encoder
+│   │   │   └── codecs/      # un módulo por formato, contra traits ImageDecoder/ImageEncoder
 │   │   │       ├── png.rs
 │   │   │       ├── jpeg.rs
 │   │   │       ├── webp.rs
@@ -84,7 +84,7 @@ compressor/                  (repo)
 Principios:
 
 - **Toda la lógica vive en `core`**. Los bindings solo convierten tipos, errores y manejan async. Con la misma versión del core, los tres lenguajes producen bytes idénticos — y eso se prueba en CI.
-- **Códecs como plugins**: cada formato implementa los traits `Decoder`/`Encoder` contra la representación intermedia `DecodedImage`. Agregar JPEG XL o un backend AVIF alternativo en v2 no toca la API.
+- **Códecs como plugins**: cada formato implementa los traits `ImageDecoder`/`ImageEncoder` contra la representación intermedia `DecodedImage`. Agregar JPEG XL o un backend AVIF alternativo en v2 no toca la API.
 
 ### Matriz de códecs v1 (verificada jun 2026)
 
