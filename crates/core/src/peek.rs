@@ -115,6 +115,23 @@ mod tests {
         assert_eq!(peek_dimensions(Format::WebP, &bytes), Some((32, 24)));
     }
 
+    /// WebP VP8 lossy: header artesanal con dimensiones 640x480.
+    #[test]
+    fn webp_vp8_lossy_peek_dims() {
+        // Header VP8 lossy crafteado: RIFF + "VP8 " + frame tag + start code + dims 14-bit LE.
+        let mut f = Vec::new();
+        f.extend(b"RIFF");
+        f.extend(20u32.to_le_bytes());
+        f.extend(b"WEBP");
+        f.extend(b"VP8 ");
+        f.extend(12u32.to_le_bytes());
+        f.extend([0x00, 0x00, 0x00]); // frame tag (keyframe bits no importan para peek)
+        f.extend([0x9D, 0x01, 0x2A]); // start code
+        f.extend(640u16.to_le_bytes()); // width 14 bits
+        f.extend(480u16.to_le_bytes()); // height 14 bits
+        assert_eq!(peek_dimensions(Format::WebP, &f), Some((640, 480)));
+    }
+
     /// AVIF siempre devuelve None (sin peek barato).
     #[test]
     fn avif_siempre_none() {

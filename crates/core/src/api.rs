@@ -11,6 +11,8 @@ use crate::sniff::sniff;
 
 /// Re-encodea optimizando en el MISMO formato de entrada.
 ///
+/// `opts.format` se ignora en `compress`; para transcodificar usá [`convert`].
+///
 /// # Errors
 /// `UnsupportedFormat`, `InvalidOptions`, `LimitExceeded`, `Decode`, `Encode`.
 pub fn compress(data: &[u8], opts: &Options) -> Result<Output, Error> {
