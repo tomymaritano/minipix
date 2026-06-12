@@ -50,28 +50,19 @@ for (const vector of ['gradient_circle', 'flat_colors']) {
   );
   console.log(`[OK] ${vector} png: wasm == native golden`);
 
-  // AVIF: rav1e asm-off (wasm) vs asm-on (nativo) — hashes difieren.
-  // Decisión (a): no se compara byte-exact; se valida estructura y tamaño relativo.
+  // AVIF: paridad byte a byte wasm==native VERIFICADA (rav1e asm-off == asm-on,
+  // 2026-06-12). Assert duro contra el golden nativo: si una versión futura de
+  // rav1e rompe la paridad, este test DEBE fallar para forzar una decisión
+  // explícita (golden wasm separado o investigación).
   const avif = convert(input, { format: 'avif', effort: 4 });
   const avifHash = sha(avif.data);
-  const avifGolden = goldens[`${vector}.convert.avif.q75e4`];
-  const avifMatch = avifHash === avifGolden;
-  avifResults.push({ vector, match: avifMatch, wasmHash: avifHash.slice(0, 16), nativeHash: avifGolden.slice(0, 16) });
-  console.log(`[INFO] ${vector} avif: wasm=${avifHash.slice(0, 16)} native=${avifGolden.slice(0, 16)} match=${avifMatch}`);
-  if (avifMatch) {
-    // Si hash idéntico: ¡paridad total! Convertir a assert duro.
-    assert.equal(avifHash, avifGolden, `${vector} avif total parity wasm==native`);
-    console.log(`[OK] ${vector} avif: TOTAL PARITY (wasm == native)`);
-  } else {
-    // Los bytes difieren (esperado por asm vs no-asm) — validar tamaño razonable.
-    // Tolerancia: output wasm debe estar dentro del ±20% del tamaño nativo golden.
-    // (No podemos verificar tamaño exacto del nativo sin decodificarlo desde el golden hash,
-    // pero podemos verificar que el output wasm no sea trivialmente pequeño/grande.)
-    assert.ok(avif.bytesOut > 100, `${vector} avif wasm: output demasiado pequeño (${avif.bytesOut} bytes)`);
-    assert.ok(avif.bytesOut < 10_000_000, `${vector} avif wasm: output demasiado grande (${avif.bytesOut} bytes)`);
-    assert.equal(avif.format, 'avif', `${vector} avif format correcto`);
-    console.log(`[OK] ${vector} avif: wasm difiere de nativo (esperado, asm vs no-asm) — tamaño=${avif.bytesOut} bytes, formato=avif`);
-  }
+  assert.equal(
+    avifHash,
+    goldens[`${vector}.convert.avif.q75e4`],
+    `${vector} AVIF parity wasm==native rota — decidir explícitamente (ver comentario)`
+  );
+  avifResults.push({ vector, match: true, wasmHash: avifHash.slice(0, 16), nativeHash: goldens[`${vector}.convert.avif.q75e4`].slice(0, 16) });
+  console.log(`[OK] ${vector} avif: wasm == native golden`);
 
   // JPEG: encoder distinto por diseño (jpeg-encoder vs mozjpeg) — sanity only.
   const jpg = convert(input, { format: 'jpeg' });
