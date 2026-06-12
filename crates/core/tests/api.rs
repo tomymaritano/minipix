@@ -1,7 +1,7 @@
 //! Tests de integración de la API pública.
 #![allow(clippy::unwrap_used)]
 
-use minipix_core::{Error, Format, Options, compress, convert};
+use minipix_core::{Error, Format, Options, compress, convert, encode_rgba};
 
 /// PNG válido de 4x4 generado con el propio crate png (dep ya presente).
 fn tiny_png() -> Vec<u8> {
@@ -77,4 +77,36 @@ fn limite_de_pixeles_corta_antes_de_decodear() {
     bytes.extend([0, 0, 0, 0]); // CRC inválido: no llegamos a leerlo
     let err = compress(&bytes, &Options::default()).unwrap_err();
     assert!(matches!(err, Error::LimitExceeded { .. }));
+}
+
+#[test]
+fn encode_rgba_directo_a_webp() {
+    let rgba = vec![128u8; 4 * 4 * 4];
+    let out = encode_rgba(
+        &rgba,
+        4,
+        4,
+        Format::WebP,
+        &Options::default().with_lossless(true),
+    )
+    .unwrap();
+    assert_eq!(minipix_core::sniff::sniff(&out.data), Some(Format::WebP));
+    assert_eq!((out.width, out.height), (4, 4));
+    assert_eq!(out.bytes_in, (4 * 4 * 4) as u64);
+}
+
+#[test]
+fn encode_rgba_valida_buffer_y_limite() {
+    let rgba = vec![0u8; 10]; // largo inválido
+    assert!(encode_rgba(&rgba, 4, 4, Format::Png, &Options::default()).is_err());
+    let rgba = vec![0u8; 4 * 4 * 4];
+    let mut opts = Options::default();
+    opts.max_pixels = 8;
+    assert!(matches!(
+        encode_rgba(&rgba, 4, 4, Format::Png, &opts).unwrap_err(),
+        Error::LimitExceeded {
+            pixels: 16,
+            limit: 8
+        }
+    ));
 }

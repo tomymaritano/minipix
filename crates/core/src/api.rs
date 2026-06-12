@@ -74,3 +74,36 @@ fn encode(format: Format, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>,
         Format::Avif => AvifCodec.encode(img, opts),
     }
 }
+
+/// Codifica píxeles RGBA8 crudos (sRGB) al formato pedido, sin pasar por un decoder.
+/// Caso de uso principal: el playground wasm alimenta imágenes decodificadas por el
+/// navegador (p.ej. AVIF). `bytes_in` reporta el tamaño del buffer RGBA de entrada.
+///
+/// # Errors
+/// `InvalidOptions` (buffer/opciones inválidas), `LimitExceeded`, `Encode`.
+pub fn encode_rgba(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    format: Format,
+    opts: &Options,
+) -> Result<Output, Error> {
+    opts.validate()?;
+    let pixels = u64::from(width) * u64::from(height);
+    if pixels > opts.max_pixels {
+        return Err(Error::LimitExceeded {
+            pixels,
+            limit: opts.max_pixels,
+        });
+    }
+    let img = DecodedImage::new(width, height, rgba.to_vec())?;
+    let encoded = encode(format, &img, opts)?;
+    Ok(Output {
+        format,
+        width,
+        height,
+        bytes_in: rgba.len() as u64,
+        bytes_out: encoded.len() as u64,
+        data: encoded,
+    })
+}

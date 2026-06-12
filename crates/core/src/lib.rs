@@ -42,7 +42,7 @@ pub mod sniff;
 #[cfg(test)]
 pub(crate) mod testutil;
 
-pub use api::{compress, convert};
+pub use api::{compress, convert, encode_rgba};
 pub use error::Error;
 pub use format::Format;
 pub use image::DecodedImage;
