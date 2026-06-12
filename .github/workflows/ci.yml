@@ -11,6 +11,7 @@ jobs:
         with: { components: "clippy, rustfmt" }
       - uses: Swatinem/rust-cache@v2
       - uses: ilammy/setup-nasm@v1
+        with: { version: "2.16.03" } # 3.x rompe el check de cmake de libaom (texto de ayuda -Ox)
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
