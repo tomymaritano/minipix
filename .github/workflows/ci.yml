@@ -33,3 +33,22 @@ jobs:
         working-directory: crates/node
       - run: npm test
         working-directory: crates/node
+
+  python-binding:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: ilammy/setup-nasm@v1
+        with: { version: "2.16.03" }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      # maturin develop requires an active venv on CI; use build + install wheel instead.
+      - run: pip install maturin pytest
+      - run: maturin build --release
+        working-directory: crates/python
+      - run: pip install target/wheels/minipix-*.whl
+        working-directory: crates/python
+      - run: pytest tests/ -v
+        working-directory: crates/python
