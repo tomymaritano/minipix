@@ -3,6 +3,7 @@ use crate::error::Error;
 use crate::image::DecodedImage;
 use crate::options::Options;
 
+pub(crate) mod jpeg;
 pub(crate) mod png;
 
 /// Decodifica bytes del formato a RGBA8 sRGB.

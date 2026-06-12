@@ -11,6 +11,11 @@ thiserror = "2"
 png = "0.18"
 oxipng = { version = "10", default-features = false, features = ["parallel", "zopfli"] }
 quantette = { version = "0.6", features = ["threads"] }
+zune-jpeg = "0.5"
+zune-core = "0.5"
+
+[dev-dependencies]
+jpeg-encoder = "0.7"
 
 [lints]
 workspace = true
