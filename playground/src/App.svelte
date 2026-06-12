@@ -3,11 +3,16 @@
   import DropZone from './lib/components/DropZone.svelte';
   import GlobalControls from './lib/components/GlobalControls.svelte';
   import JobCard from './lib/components/JobCard.svelte';
+  import { downloadAllZip } from './lib/zip.js';
 
   function fmt(bytes: number): string {
     if (bytes < 1024) return `${String(bytes)} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function handleDownloadAll(): void {
+    downloadAllZip(playground.jobs);
   }
 </script>
 
@@ -37,6 +42,12 @@
           <span class="totals__saving">
             {playground.totals.percent}% smaller
           </span>
+
+          {#if playground.totals.doneCount >= 2}
+            <button class="btn-download-all" onclick={handleDownloadAll}>
+              Download all (.zip)
+            </button>
+          {/if}
         </div>
       {/if}
 
@@ -97,6 +108,7 @@
     border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
     border-radius: 8px;
     padding: 0.6rem 1rem;
+    flex-wrap: wrap;
   }
 
   .totals__label {
@@ -115,6 +127,28 @@
   .totals__saving {
     font-weight: 600;
     color: var(--color-success);
+  }
+
+  .btn-download-all {
+    margin-left: auto;
+    font-size: 0.8125rem;
+    padding: 0.3rem 0.85rem;
+    background: var(--color-surface);
+    color: var(--color-accent);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.12s;
+    white-space: nowrap;
+  }
+
+  .btn-download-all:hover {
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  }
+
+  .btn-download-all:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 
   .job-list {

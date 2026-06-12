@@ -1,6 +1,7 @@
 <script lang="ts">
   import { playground } from '../state.svelte.js';
   import type { Job } from '../state.svelte.js';
+  import CompareSlider from './CompareSlider.svelte';
 
   interface Props {
     job: Job;
@@ -8,7 +9,48 @@
 
   const { job }: Props = $props();
 
-  // Object URL for the original file preview — revoked when component is destroyed.
+  // ── MIME helpers ──────────────────────────────────────────────────────────
+  const mimeMap: Record<string, string> = {
+    png: 'image/png',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+    avif: 'image/avif',
+  };
+
+  function mimeFor(format: string): string {
+    return mimeMap[format] ?? 'application/octet-stream';
+  }
+
+  function extFor(format: string): string {
+    const map: Record<string, string> = {
+      png: 'png',
+      jpeg: 'jpg',
+      webp: 'webp',
+      avif: 'avif',
+    };
+    return map[format] ?? format;
+  }
+
+  // ── Formatting helpers ────────────────────────────────────────────────────
+  function fmt(bytes: number): string {
+    if (bytes < 1024) return `${String(bytes)} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function fmtRatio(ratio: number): string {
+    if (ratio >= 1) {
+      // File grew — show positive red value
+      return `+${String(Math.round((ratio - 1) * 100))}%`;
+    }
+    return `−${String(Math.round((1 - ratio) * 100))}%`;
+  }
+
+  function ratioClass(ratio: number): string {
+    return ratio >= 1 ? 'job-card__ratio--worse' : 'job-card__ratio--better';
+  }
+
+  // ── Original preview URL ──────────────────────────────────────────────────
   let previewUrl = $state<string | undefined>(undefined);
 
   $effect(() => {
@@ -19,16 +61,39 @@
     };
   });
 
-  function fmt(bytes: number): string {
-    if (bytes < 1024) return `${String(bytes)} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  // ── Result preview URL ────────────────────────────────────────────────────
+  let resultUrl = $state<string | undefined>(undefined);
+  let resultImgError = $state(false);
+
+  $effect(() => {
+    if (job.status !== 'done' || !job.result) {
+      resultUrl = undefined;
+      return;
+    }
+    const blob = new Blob([job.result.data], { type: mimeFor(job.result.format) });
+    const url = URL.createObjectURL(blob);
+    resultUrl = url;
+    resultImgError = false;
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  });
+
+  // ── Compare slider toggle ─────────────────────────────────────────────────
+  let showCompare = $state(false);
+
+  function toggleCompare(): void {
+    showCompare = !showCompare;
   }
 
-  function fmtRatio(ratio: number): string {
-    return `−${String(Math.round((1 - ratio) * 100))}%`;
+  // ── Download name ─────────────────────────────────────────────────────────
+  function outName(j: Job): string {
+    if (!j.result) return j.file.name;
+    const base = j.file.name.replace(/\.[^.]+$/, '');
+    return `${base}.${extFor(j.result.format)}`;
   }
 
+  // ── Other actions ─────────────────────────────────────────────────────────
   function handleRetry(): void {
     playground.retry(job);
   }
@@ -52,9 +117,19 @@
 </script>
 
 <article class="job-card" aria-label={`Job: ${job.file.name}`}>
-  <!-- Preview -->
+  <!-- Preview (thumbnail) -->
   <div class="job-card__preview">
-    {#if previewUrl}
+    {#if job.status === 'done' && resultUrl && !resultImgError}
+      <!-- Show result thumbnail when done -->
+      <img
+        src={resultUrl}
+        alt={job.file.name}
+        loading="lazy"
+        onerror={() => {
+          resultImgError = true;
+        }}
+      />
+    {:else if previewUrl}
       <img src={previewUrl} alt={job.file.name} loading="lazy" />
     {:else}
       <div class="job-card__preview-placeholder" aria-hidden="true"></div>
@@ -85,8 +160,12 @@
     {:else if job.status === 'done' && job.result}
       <span class="badge badge--done">Done</span>
       <p class="job-card__result">
-        {fmt(job.result.bytesOut)}
-        <span class="job-card__ratio">{fmtRatio(job.result.ratio)}</span>
+        <span class="job-card__bytes-before">{fmt(job.result.bytesIn)}</span>
+        <span class="job-card__arrow">→</span>
+        <span class="job-card__bytes-after">{fmt(job.result.bytesOut)}</span>
+        <span class="job-card__ratio {ratioClass(job.result.ratio)}"
+          >{fmtRatio(job.result.ratio)}</span
+        >
       </p>
       <p class="job-card__dims">{job.result.width}×{job.result.height} · {job.result.format}</p>
     {:else if job.status === 'error'}
@@ -99,6 +178,26 @@
 
   <!-- Actions -->
   <div class="job-card__actions">
+    {#if job.status === 'done' && job.result && resultUrl}
+      {#if !resultImgError}
+        <button
+          class="btn-compare"
+          onclick={toggleCompare}
+          aria-expanded={showCompare}
+          aria-label={`${showCompare ? 'Hide' : 'Show'} comparison for ${job.file.name}`}
+        >
+          {showCompare ? 'Hide' : 'Compare'}
+        </button>
+      {/if}
+      <a
+        class="btn-download"
+        href={resultUrl}
+        download={outName(job)}
+        aria-label={`Download ${outName(job)}`}
+      >
+        Download
+      </a>
+    {/if}
     {#if job.status === 'error' || job.status === 'done'}
       <button class="btn-retry" onclick={handleRetry} aria-label={`Retry ${job.file.name}`}>
         Retry
@@ -106,6 +205,25 @@
     {/if}
   </div>
 </article>
+
+<!-- Compare slider — full-width row below the card -->
+{#if showCompare && previewUrl && resultUrl && !resultImgError}
+  <div class="job-card__compare">
+    {#if resultImgError}
+      <p class="job-card__avif-fallback">
+        Your browser cannot preview this format — download to view.
+      </p>
+    {:else}
+      <CompareSlider beforeUrl={previewUrl} afterUrl={resultUrl} />
+    {/if}
+  </div>
+{:else if showCompare && resultImgError}
+  <div class="job-card__compare">
+    <p class="job-card__avif-fallback">
+      Your browser cannot preview this format — download to view.
+    </p>
+  </div>
+{/if}
 
 <style>
   .job-card {
@@ -182,14 +300,35 @@
     font-size: 0.8125rem;
     color: var(--color-text-secondary);
     display: flex;
-    gap: 0.35rem;
+    gap: 0.3rem;
     align-items: baseline;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .job-card__arrow {
+    color: var(--color-muted);
+  }
+
+  .job-card__bytes-before {
+    color: var(--color-muted);
+  }
+
+  .job-card__bytes-after {
+    color: var(--color-text-secondary);
   }
 
   .job-card__ratio {
     font-size: 0.75rem;
-    color: var(--color-success);
     font-weight: 600;
+  }
+
+  .job-card__ratio--better {
+    color: var(--color-success);
+  }
+
+  .job-card__ratio--worse {
+    color: var(--color-error);
   }
 
   .job-card__dims {
@@ -209,6 +348,22 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
+    gap: 0.35rem;
+  }
+
+  /* Compare panel */
+  .job-card__compare {
+    margin-top: 0.5rem;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+  }
+
+  .job-card__avif-fallback {
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+    padding: 0.75rem 1rem;
+    text-align: center;
   }
 
   /* Badges */
@@ -260,8 +415,10 @@
     }
   }
 
-  /* Retry button */
-  .btn-retry {
+  /* Buttons */
+  .btn-retry,
+  .btn-compare,
+  .btn-download {
     font-size: 0.8125rem;
     padding: 0.3rem 0.75rem;
     background: var(--color-surface);
@@ -270,15 +427,32 @@
     border-radius: 5px;
     cursor: pointer;
     transition: background 0.12s;
+    text-decoration: none;
+    display: inline-block;
+    white-space: nowrap;
   }
 
-  .btn-retry:hover {
+  .btn-retry:hover,
+  .btn-compare:hover,
+  .btn-download:hover {
     background: var(--color-border);
     color: var(--color-text);
   }
 
-  .btn-retry:focus-visible {
+  .btn-retry:focus-visible,
+  .btn-compare:focus-visible,
+  .btn-download:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
+  }
+
+  .btn-download {
+    color: var(--color-accent);
+    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  }
+
+  .btn-download:hover {
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
   }
 </style>
