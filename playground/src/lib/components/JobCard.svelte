@@ -209,13 +209,7 @@
 <!-- Compare slider — full-width row below the card -->
 {#if showCompare && previewUrl && resultUrl && !resultImgError}
   <div class="job-card__compare">
-    {#if resultImgError}
-      <p class="job-card__avif-fallback">
-        Your browser cannot preview this format — download to view.
-      </p>
-    {:else}
-      <CompareSlider beforeUrl={previewUrl} afterUrl={resultUrl} />
-    {/if}
+    <CompareSlider beforeUrl={previewUrl} afterUrl={resultUrl} />
   </div>
 {:else if showCompare && resultImgError}
   <div class="job-card__compare">
