@@ -2440,3 +2440,5 @@ Run: `cargo bench -p minipix-core` → reporta tiempos (informativo).
 - [ ] Pánicos en bindings: napi-rs y PyO3 ya convierten panics de Rust en Error/PanicException en el borde — verificado por los tests de errores tipados; el único productor interno de unwinds (mozjpeg) se contiene en el core (Task 9).
 
 **Backlog inmediato post-M1** (spec §9.4, no bloquea el release): fuzzing con cargo-fuzz sobre `sniff`, `peek_dimensions` y los wrappers de decode (requiere nightly; job de CI separado).
+
+**Backlog del review de Task 2**: ampliar detección AVIF a `compatible_brands` del ftyp (hoy solo major brand: AVIFs con major `mif1`/`msf1` se rechazan) — hacerlo antes de v1.0 final.

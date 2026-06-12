@@ -1,6 +1,9 @@
 use crate::format::Format;
 
 /// Detecta el formato por magic bytes. `None` si no se reconoce.
+///
+/// AVIF: solo se inspecciona el major brand (`avif`/`avis`, incluye secuencias);
+/// archivos con major brand `mif1`/`msf1` no se detectan en v1 (backlog).
 #[must_use]
 pub fn sniff(data: &[u8]) -> Option<Format> {
     if data.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) {
@@ -57,5 +60,16 @@ mod tests {
     fn rechaza_basura_y_vacio() {
         assert_eq!(sniff(b"hola mundo!!"), None);
         assert_eq!(sniff(&[]), None);
+    }
+    #[test]
+    fn riff_truncado_de_11_bytes_es_none() {
+        assert_eq!(sniff(b"RIFF\x00\x00\x00\x00WEB"), None);
+    }
+    #[test]
+    fn ftyp_con_brand_no_avif_es_none() {
+        let mut data = vec![0x00, 0x00, 0x00, 0x1C];
+        data.extend(b"ftypmif1");
+        data.extend([0u8; 20]);
+        assert_eq!(sniff(&data), None);
     }
 }
