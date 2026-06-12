@@ -8,7 +8,6 @@ use crate::image::DecodedImage;
 #[allow(dead_code)] // instanciado sólo en tests hasta que se conecte al dispatcher
 pub(crate) struct PngCodec;
 
-#[allow(dead_code)] // usado dentro del impl y en tests; silenciado hasta Task 8
 fn decode_err(e: impl std::fmt::Display) -> Error {
     Error::Decode {
         format: Format::Png,
@@ -17,13 +16,22 @@ fn decode_err(e: impl std::fmt::Display) -> Error {
 }
 
 impl ImageDecoder for PngCodec {
-    fn decode(&self, data: &[u8]) -> Result<DecodedImage, Error> {
+    fn decode(&self, data: &[u8], max_pixels: u64) -> Result<DecodedImage, Error> {
         let mut decoder = png::Decoder::new(std::io::Cursor::new(data));
         // Normaliza: expande paleta/grises/16-bit y agrega alpha.
         decoder.set_transformations(
             png::Transformations::normalize_to_color8() | png::Transformations::ALPHA,
         );
         let mut reader = decoder.read_info().map_err(decode_err)?;
+        // Defensa contra bombas de dimensiones: validar ANTES de asignar el buffer.
+        let info = reader.info();
+        let pixels = u64::from(info.width) * u64::from(info.height);
+        if pixels > max_pixels {
+            return Err(Error::LimitExceeded {
+                pixels,
+                limit: max_pixels,
+            });
+        }
         let buf_size = reader
             .output_buffer_size()
             .ok_or_else(|| decode_err("output too large"))?;
@@ -62,7 +70,7 @@ mod tests {
             let mut w = enc.write_header().unwrap();
             w.write_image_data(&img.pixels).unwrap();
         }
-        let out = PngCodec.decode(&bytes).unwrap();
+        let out = PngCodec.decode(&bytes, u64::MAX).unwrap();
         assert_eq!((out.width, out.height), (32, 24));
         assert_eq!(out.pixels, img.pixels);
     }
@@ -77,13 +85,49 @@ mod tests {
             let mut w = enc.write_header().unwrap();
             w.write_image_data(&[10, 200]).unwrap();
         }
-        let out = PngCodec.decode(&bytes).unwrap();
+        let out = PngCodec.decode(&bytes, u64::MAX).unwrap();
         assert_eq!(out.pixels, vec![10, 10, 10, 255, 200, 200, 200, 255]);
     }
 
     #[test]
     fn error_tipado_con_basura() {
-        let err = PngCodec.decode(b"\x89PNGgarbage").unwrap_err();
+        let err = PngCodec.decode(b"\x89PNGgarbage", u64::MAX).unwrap_err();
         assert!(matches!(err, crate::Error::Decode { .. }));
+    }
+
+    #[test]
+    fn limite_de_pixeles_antes_de_asignar() {
+        // PNG real de 100x100 (10k px), límite 99 px → LimitExceeded, no Decode.
+        let img = vector_gradient_circle(100, 100);
+        let mut bytes = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut bytes, 100, 100);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut w = enc.write_header().unwrap();
+            w.write_image_data(&img.pixels).unwrap();
+        }
+        let err = PngCodec.decode(&bytes, 99).unwrap_err();
+        assert!(matches!(
+            err,
+            crate::Error::LimitExceeded {
+                pixels: 10_000,
+                limit: 99
+            }
+        ));
+    }
+
+    #[test]
+    fn decodea_grayscale_alpha_preserva_alpha() {
+        let mut bytes = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut bytes, 2, 1);
+            enc.set_color(png::ColorType::GrayscaleAlpha);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut w = enc.write_header().unwrap();
+            w.write_image_data(&[10, 128, 200, 255]).unwrap();
+        }
+        let out = PngCodec.decode(&bytes, u64::MAX).unwrap();
+        assert_eq!(out.pixels, vec![10, 10, 10, 128, 200, 200, 200, 255]);
     }
 }

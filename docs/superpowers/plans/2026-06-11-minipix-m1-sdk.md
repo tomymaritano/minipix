@@ -12,6 +12,7 @@
 
 1. `keepMetadata` se difiere a v2: png 0.18 no expone escritura de iCCP y ravif no embebe ICC. En v1 el color se resuelve convirtiendo a sRGB al decodificar (ICC se *aplica*, nunca se rompe) y EXIF/XMP siempre se elimina.
 2. AVIF decode: `avif-decode` (kornelski) envuelve **aom-decode/libaom**, no dav1d — reutiliza el toolchain cmake+nasm que ya exigen mozjpeg/libwebp (no suma meson). Es el camino elegido; `rav1d` queda como swap futuro.
+3. **Trait `ImageDecoder` recibe `max_pixels`** (review de Task 6): `decode(&self, data: &[u8], max_pixels: u64)`. Cada decoder valida dimensiones tan temprano como su API lo permite y devuelve `LimitExceeded` ANTES de asignar el buffer de salida (defensa contra bombas de dimensiones aun si un caller futuro saltea el `peek` del Task 15, p.ej. fuzz targets). El `peek` del Task 15 se mantiene como capa rápida. Los snippets de las Tasks 7-13 y 15 se adaptan a la nueva firma.
 
 **Convención de cada tarea:** TDD — test primero, ver que falla, implementar mínimo, ver que pasa, commit. Comandos desde la raíz del repo. `cargo test -p minipix-core` corre los tests del core.
 
