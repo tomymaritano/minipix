@@ -44,6 +44,7 @@ fn map_err(e: &minipix_core::Error) -> PyErr {
     match e {
         E::UnsupportedFormat => UnsupportedFormatError::new_err(e.to_string()),
         E::Decode { .. } | E::Encode { .. } | E::IccTransform(_) => {
+            // IccTransform se agrupa como CodecError a propósito (falla a nivel códec).
             CodecError::new_err(e.to_string())
         }
         E::InvalidOptions(_) => pyo3::exceptions::PyValueError::new_err(e.to_string()),
@@ -154,6 +155,8 @@ fn run(
 }
 
 /// Re-encodea optimizando en el mismo formato.
+///
+/// Raises `ValueError` for invalid options; `CodecError` for decode/encode failures; `LimitExceededError` if `max_pixels` exceeded.
 #[pyfunction]
 #[pyo3(signature = (data, *, quality=None, effort=None, lossless=None, alpha_quality=None, jpeg_progressive=None, max_pixels=None))]
 #[allow(clippy::too_many_arguments)]
@@ -180,6 +183,8 @@ fn compress(
 }
 
 /// Transcodea al formato indicado.
+///
+/// Raises `ValueError` for invalid options or unknown format; `CodecError` for decode/encode failures; `LimitExceededError` if `max_pixels` exceeded.
 #[pyfunction]
 #[pyo3(signature = (data, *, format, quality=None, effort=None, lossless=None, alpha_quality=None, jpeg_progressive=None, max_pixels=None))]
 #[allow(clippy::too_many_arguments)]

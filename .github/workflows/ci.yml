@@ -46,9 +46,8 @@ jobs:
         with: { python-version: "3.12" }
       # maturin develop requires an active venv on CI; use build + install wheel instead.
       - run: pip install maturin pytest
-      - run: maturin build --release
+      - run: maturin build --release -o ../../dist
         working-directory: crates/python
-      - run: pip install target/wheels/minipix-*.whl
-        working-directory: crates/python
+      - run: pip install dist/minipix-*.whl
       - run: pytest tests/ -v
         working-directory: crates/python

@@ -3,12 +3,12 @@ target/
 
 # Node
 node_modules/
-dist/
 
 # Python
 __pycache__/
 *.egg-info/
 .venv/
+dist/
 
 # Artefactos de bindings
 *.node

@@ -10,4 +10,5 @@ license = "MIT OR Apache-2.0"
 dynamic = ["version"]
 
 [tool.maturin]
-include = ["minipix.pyi"]
+# el wheel recibe minipix/__init__.pyi + py.typed auto-generados por maturin desde minipix.pyi
+include = [{ path = "minipix.pyi", format = "sdist" }]

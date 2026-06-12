@@ -1,3 +1,4 @@
+# Opciones inválidas / formato desconocido lanzan ValueError (stdlib), no MinipixError.
 from typing import Optional
 
 class Output:
