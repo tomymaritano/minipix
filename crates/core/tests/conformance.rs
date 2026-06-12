@@ -1,6 +1,8 @@
 //! Goldens compartidos: la matriz (vector × operación) produce hashes estables.
 //! Los scripts de Node y Python (Tasks 17/18) verifican los MISMOS hashes.
 //! Regenerar con: MINIPIX_REGEN_GOLDENS=1 cargo test -p minipix-core --test conformance
+//!
+//! RIESGO CONOCIDO cross-OS: los goldens se generaron en Windows/MSVC; rav1e (asm) es el sospechoso #1 si Linux CI diverge. Validar en el primer push; si AVIF diverge, calificar esas claves por plataforma SIN debilitar las claves puras (input/png).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::doc_markdown)]
 
 use minipix_core::{Format, Options, compress, convert};
@@ -75,7 +77,7 @@ fn outputs_matchean_goldens() {
 /// Defiende la duplicación testutil/example: el PNG en disco debe ser
 /// EXACTAMENTE el que produce la fórmula (vía el hash del input en goldens).
 #[test]
-fn vectores_en_disco_matchean_formula() {
+fn vectores_en_disco_decodifican_con_dims_correctas() {
     // gradient_circle 128x96 regenerado en memoria con la fórmula del example
     // (misma que testutil) y encodeado igual → bytes idénticos al archivo.
     // Implementar: regenerar los píxeles aquí (copiar la fórmula UNA tercera vez

@@ -43,3 +43,31 @@ pub fn vector_flat_colors(w: u32, h: u32) -> DecodedImage {
     }
     DecodedImage::new(w, h, px).unwrap()
 }
+
+#[cfg(test)]
+mod sync_tests {
+    #![allow(clippy::unwrap_used)]
+    use super::vector_gradient_circle;
+    use std::io::Cursor;
+
+    /// Tercera pata de la defensa anti-drift: la fórmula de testutil debe producir
+    /// EXACTAMENTE los píxeles del vector en disco (generado por `examples/gen_vectors.rs`).
+    #[test]
+    fn testutil_matchea_vector_en_disco() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let data = std::fs::read(root.join("tests/vectors/gradient_circle.png")).unwrap();
+        let mut decoder = png::Decoder::new(Cursor::new(&data[..]));
+        decoder.set_transformations(
+            png::Transformations::normalize_to_color8() | png::Transformations::ALPHA,
+        );
+        let mut reader = decoder.read_info().unwrap();
+        let mut buf = vec![0u8; reader.output_buffer_size().unwrap()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        buf.truncate(info.buffer_size());
+        let expected = vector_gradient_circle(128, 96);
+        assert_eq!(
+            buf, expected.pixels,
+            "testutil y el vector en disco divergieron"
+        );
+    }
+}
