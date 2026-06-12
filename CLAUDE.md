@@ -8,7 +8,7 @@ SDK de compresión/conversión de imágenes (PNG, JPEG, WebP, AVIF) con core en 
 2. **Códecs solo detrás de los traits `ImageDecoder`/`ImageEncoder`** contra `DecodedImage`. Nada fuera de `crates/core/src/codecs/` llama a un crate de códec directamente.
 3. **Paridad byte a byte entre bindings nativos** es promesa contractual. Cualquier cambio que altere bytes de salida regenera los goldens de forma explícita y se justifica en el PR (tolerancias: SSIM −0.005 / tamaño +3%, spec §9).
 4. **Ningún pánico cruza la FFI**: `catch_unwind` en el borde de cada binding. Un pánico se reporta como error interno, jamás aborta el proceso anfitrión.
-5. **Árbol de licencias permisivo** (MIT/Apache/BSD/Zlib/IJG). Nada GPL/LGPL/AGPL — lo aplica `cargo deny check` en CI; no agregar excepciones a `deny.toml` sin discutirlo primero.
+5. **Árbol de licencias permisivo** (MIT/Apache/BSD/Zlib/IJG/NCSA). Nada GPL/LGPL/AGPL — lo aplica `cargo deny check` en CI; no agregar excepciones a `deny.toml` sin discutirlo primero. Excepción documentada: MPL-2.0 (avif-parse, copyleft débil a nivel de archivo — no modificamos el crate; ver deny.toml).
 
 ## Git flow
 

@@ -1,6 +1,6 @@
 # minipix
 
-**minipix** is an image compression and conversion SDK supporting PNG, JPEG, WebP, and AVIF. A single Rust core (`minipix-core`) is published to npm, PyPI, and crates.io, giving JavaScript, Python, and Rust users the same API, the same encoding engine, and byte-identical output across all three languages — verified by SHA-256 conformance goldens in CI. The entire dependency tree is permissive-licensed; compliance is enforced by `cargo-deny` in CI.
+**minipix** is an image compression and conversion SDK supporting PNG, JPEG, WebP, and AVIF. A single Rust core (`minipix-core`) is published to npm, PyPI, and crates.io, giving JavaScript, Python, and Rust users the same API, the same encoding engine, and byte-identical output across all three languages — verified by SHA-256 conformance goldens in CI. The dependency tree is permissive-licensed (one documented MPL-2.0 file-level-copyleft exception, see [Codecs & licenses](#codecs--licenses)); compliance is enforced by `cargo-deny` in CI.
 
 > **Warning: Pre-release (v0.1.0, milestone M1).** APIs are stabilising. Breaking changes may occur before the stable tag.
 
@@ -119,7 +119,7 @@ Errors carry a `[CODE] message` prefix, e.g. `[UnsupportedFormat] …`. Invalid 
 | AVIF | `avif-decode` / `libaom` | `ravif` / `rav1e` | BSD-2 + patent grant (libaom); BSD-2 (rav1e) |
 | Color | `moxcms` (ICC → sRGB) | — | BSD-3 / Apache-2.0 |
 
-All dependencies are permissive. Compliance enforced by `cargo-deny` in CI.
+All dependencies are permissive (MIT/Apache/BSD/Zlib/IJG/NCSA), with one documented exception: `avif-parse` (the AVIF container parser) is MPL-2.0 — weak file-level copyleft that imposes no obligations on minipix or its users since the crate is consumed unmodified. No GPL/LGPL/AGPL anywhere in the tree. Compliance enforced by `cargo-deny` in CI (see `deny.toml` for the documented rationale).
 
 ---
 

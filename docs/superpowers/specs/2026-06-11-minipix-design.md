@@ -120,7 +120,7 @@ Dos operaciones, mismos nombres, mismas opciones y misma semántica en los tres 
 | `format` | enum | — (requerido en `convert`) | png \| jpeg \| webp \| avif |
 | `quality` | 1–100 | 75 | Tabla de mapeo estática y documentada por códec (calibrada una vez con SSIM sobre los vectores de prueba) para que el mismo número dé calidad visual comparable entre formatos; auto-ajuste perceptual queda para v2 |
 | `effort` | 0–9 | 4 | CPU invertido en reducir bytes (nivel oxipng / effort libwebp / speed rav1e invertido) |
-| `lossless` | bool | false | Fuerza camino sin pérdida (PNG siempre; WebP/AVIF soportan; JPEG lo rechaza con error) |
+| `lossless` | bool | false | Fuerza camino sin pérdida (PNG siempre; WebP soporta; JPEG lo rechaza con error; **AVIF lo rechaza en v1** — ravif no expone lossless, verificado en implementación) |
 | `keepMetadata` | — | — | **Diferido a v2** (verificado: png 0.18 no escribe iCCP y ravif no embebe ICC). En v1: EXIF/XMP siempre se elimina, y el ICC **se aplica** convirtiendo los píxeles a sRGB al decodificar — los colores nunca se rompen y todo output es sRGB |
 | Por formato | namespace | — | `jpeg.progressive`, `jpeg.chromaSubsampling`, `png.interlace`, `avif.chromaSubsampling`, `webp.alphaQuality`, etc. |
 
