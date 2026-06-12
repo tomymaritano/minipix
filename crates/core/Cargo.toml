@@ -6,6 +6,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# Perfiles MUTUAMENTE EXCLUYENTES en intención: native gana si ambos están
+# activos (los cfg usan all(wasm, not(native))). Sin ninguno: compile_error.
 [features]
 default = ["native"]
 # Códecs C de máxima calidad + paralelismo (build nativo)
