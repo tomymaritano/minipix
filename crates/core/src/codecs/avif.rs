@@ -40,13 +40,17 @@ impl ImageEncoder for AvifCodec {
         // valid range [1, 10].
         let speed = 10u8.saturating_sub(opts.effort).max(1);
 
-        // ravif's Encoder does not expose a thread-count option in 0.13;
-        // rav1e uses a thread pool internally but tiles deterministically,
-        // so output bytes are byte-identical regardless of thread count.
+        // DETERMINISMO: ravif deriva la cantidad de tiles AV1 de los threads
+        // (threads=None → rayon::current_num_threads()), y la geometría de tiles
+        // CAMBIA los bytes de salida. Se fija threads=1 → 1 tile → bytes idénticos
+        // en cualquier máquina (requisito de los goldens de conformance, CLAUDE.md §3).
+        // Trade-off: encode secuencial por llamada; el paralelismo se obtiene a nivel
+        // de batch (rayon sobre múltiples imágenes), no dentro de un encode.
         let res = ravif::Encoder::new()
             .with_quality(f32::from(opts.quality))
             .with_alpha_quality(f32::from(opts.alpha_quality))
             .with_speed(speed)
+            .with_num_threads(Some(1))
             .encode_rgba(buf)
             .map_err(encode_err)?;
 
