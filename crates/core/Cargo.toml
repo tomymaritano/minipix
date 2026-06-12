@@ -26,6 +26,7 @@ moxcms = "0.8.1"
 
 [dev-dependencies]
 jpeg-encoder = "0.7"
+png = "0.18"
 
 [lints]
 workspace = true

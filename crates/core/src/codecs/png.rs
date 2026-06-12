@@ -7,7 +7,6 @@ use crate::image::DecodedImage;
 use crate::options::Options;
 
 /// Codec for decoding and encoding PNG images.
-#[allow(dead_code)] // instanciado sólo en tests hasta que se conecte al dispatcher
 pub(crate) struct PngCodec;
 
 fn decode_err(e: impl std::fmt::Display) -> Error {
@@ -66,13 +65,11 @@ impl ImageDecoder for PngCodec {
 }
 
 /// `quality` 1-100 → tamaño de paleta 8..=256.
-#[allow(dead_code)]
 fn palette_size(quality: u8) -> u16 {
     ((u16::from(quality) * 256) / 100).clamp(8, 256)
 }
 
 /// `effort` 0-9 → preset oxipng 0..=6 (7+ activa zopfli).
-#[allow(dead_code)]
 fn oxipng_options(effort: u8) -> oxipng::Options {
     let mut o = oxipng::Options::from_preset(effort.min(6));
     if effort >= 7 {
@@ -94,7 +91,6 @@ impl ImageEncoder for PngCodec {
     }
 }
 
-#[allow(dead_code)]
 fn encode_rgba_png(img: &DecodedImage) -> Result<Vec<u8>, Error> {
     let mut out = Vec::new();
     let mut enc = png::Encoder::new(&mut out, img.width, img.height);
@@ -109,7 +105,6 @@ fn encode_rgba_png(img: &DecodedImage) -> Result<Vec<u8>, Error> {
 
 /// Cuantiza con quantette a paleta ≤256 + escribe PNG indexado opaco.
 /// Sólo se llama para imágenes OPACAS (alpha=255 siempre); escribe PLTE sin tRNS.
-#[allow(dead_code)]
 fn encode_indexed_png(img: &DecodedImage, max_colors: u16) -> Result<Vec<u8>, Error> {
     let (palette, indices) = quantize_rgba(img, max_colors)?;
     let mut out = Vec::new();
@@ -127,7 +122,6 @@ fn encode_indexed_png(img: &DecodedImage, max_colors: u16) -> Result<Vec<u8>, Er
 
 /// Cuantiza la imagen (RGBA opaca) a paleta RGB ≤`max_colors` + índices u8 por píxel.
 /// Usa quantette 0.6 Pipeline con Wu quantization y Floyd-Steinberg dithering.
-#[allow(dead_code)]
 fn quantize_rgba(img: &DecodedImage, max_colors: u16) -> Result<(Vec<[u8; 4]>, Vec<u8>), Error> {
     use quantette::deps::palette::Srgb;
     use quantette::{ImageRef, Pipeline, dither::FloydSteinberg};

@@ -10,7 +10,6 @@ use crate::image::DecodedImage;
 use crate::options::Options;
 
 /// Codec for decoding and encoding WebP images.
-#[allow(dead_code)] // instanciado sólo en tests hasta que se conecte al dispatcher (Task 15)
 pub(crate) struct WebpCodec;
 
 fn decode_err(e: impl std::fmt::Display) -> Error {
