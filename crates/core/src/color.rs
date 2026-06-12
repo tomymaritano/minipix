@@ -40,9 +40,28 @@ pub(crate) fn apply_profile_to_srgb(rgba: &mut [u8], profile: &ColorProfile) -> 
 /// Parsea un blob ICC crudo y aplica la conversión a sRGB sobre `rgba` (RGBA8).
 ///
 /// Si el blob no es un perfil ICC válido devuelve `Err` sin tocar los píxeles.
+/// Solo se aplican perfiles RGB: un perfil CMYK (u otro espacio no-RGB) haría que
+/// moxcms interprete los 4 bytes RGBA como CMYK → colores basura silenciosos.
 pub(crate) fn apply_icc_to_srgb(rgba: &mut [u8], icc: &[u8]) -> Result<(), Error> {
     let profile =
         ColorProfile::new_from_slice(icc).map_err(|e| Error::IccTransform(e.to_string()))?;
+
+    // Solo perfiles RGB (o Gray con TRC) tienen sentido sobre nuestros pixels RGBA.
+    // CMYK/otros: moxcms crearía un transform "exitoso" que interpreta RGBA como
+    // CMYK → colores basura silenciosos. Se deja la imagen como decodificó.
+    if !matches!(profile.color_space, moxcms::DataColorSpace::Rgb) {
+        return Err(Error::IccTransform(format!(
+            "unsupported ICC color space {:?} (only RGB profiles are applied)",
+            profile.color_space
+        )));
+    }
+
+    // TODO(backlog): short-circuit sRGB — si el perfil es sRGB la transformación
+    // es una identidad costosa (2 copias + transform completo). ColorProfile no
+    // implementa PartialEq en moxcms 0.8, por lo que no hay comparación trivial.
+    // Comparar primaries/white-point dentro de epsilon sería >20 líneas de float
+    // fiddly; se difiere hasta que moxcms exponga PartialEq o un helper is_srgb().
+
     apply_profile_to_srgb(rgba, &profile)
 }
 
@@ -118,6 +137,25 @@ mod tests {
             "el transform debe cambiar valores: {pixels:?}"
         );
         assert_eq!(pixels[3], 255);
+    }
+
+    #[test]
+    fn colorspace_no_rgb_devuelve_error() {
+        // Un perfil Gray (color_space = DataColorSpace::Gray) no es RGB.
+        // La guard debe rechazarlo con Err sin tocar los píxeles.
+        // Usamos new_gray_with_gamma (disponible en moxcms 0.8) para construir
+        // un perfil con color_space::Gray serializable como ICC blob real.
+        let gray_profile = moxcms::ColorProfile::new_gray_with_gamma(2.2);
+        let gray_bytes = encode_profile(&gray_profile);
+        let mut pixels = vec![1u8, 2, 3, 255];
+        let result = apply_icc_to_srgb(&mut pixels, &gray_bytes);
+        assert!(
+            result.is_err(),
+            "perfil no-RGB debe devolver Err; color_space={:?}",
+            gray_profile.color_space
+        );
+        // Los píxeles NO deben haberse modificado.
+        assert_eq!(pixels, vec![1, 2, 3, 255], "pixels deben quedar intactos");
     }
 
     #[test]
