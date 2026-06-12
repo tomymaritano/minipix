@@ -1,4 +1,4 @@
-/* minipix — sensible resets */
+/* minipix — sensible resets + dark-ish design tokens */
 *,
 *::before,
 *::after {
@@ -12,6 +12,30 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* ── Design tokens (dark-ish neutral palette) ─────────────────────────── */
+:root {
+  /* Backgrounds */
+  --color-bg: #111214;
+  --color-surface: #1a1c1f;
+
+  /* Borders */
+  --color-border: #2d3035;
+
+  /* Text */
+  --color-text: #e8eaed;
+  --color-text-secondary: #a8adb6;
+  --color-muted: #62666f;
+
+  /* Accent (blue) */
+  --color-accent: #4e8ef7;
+  --color-accent-muted: rgba(78, 142, 247, 0.12);
+
+  /* Semantic */
+  --color-success: #4caf7d;
+  --color-warn: #e8a930;
+  --color-error: #e05c5c;
+}
+
 body {
   font-family:
     system-ui,
@@ -21,8 +45,8 @@ body {
     Roboto,
     sans-serif;
   line-height: 1.5;
-  color: #1a1a1a;
-  background-color: #ffffff;
+  color: var(--color-text);
+  background-color: var(--color-bg);
 }
 
 img,
