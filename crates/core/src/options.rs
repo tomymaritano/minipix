@@ -3,6 +3,7 @@ use crate::format::Format;
 
 /// Opciones unificadas (mismo vocabulario en Rust, Node y Python).
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Options {
     /// Formato destino. `None` = mismo formato de entrada (`compress`).
     pub format: Option<Format>,
@@ -68,6 +69,9 @@ impl Options {
     /// # Errors
     /// Returns an error if quality, effort, or `alpha_quality` are out of valid ranges.
     pub fn validate(&self) -> Result<(), Error> {
+        if self.max_pixels == 0 {
+            return Err(Error::InvalidOptions("max_pixels must be > 0".into()));
+        }
         if !(1..=100).contains(&self.quality) {
             return Err(Error::InvalidOptions(format!(
                 "quality must be 1-100, got {}",
@@ -86,12 +90,14 @@ impl Options {
                 self.alpha_quality
             )));
         }
+        // format, lossless, and jpeg_progressive have no invariants to check (deliberate)
         Ok(())
     }
 }
 
 /// Resultado de `compress`/`convert`.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Output {
     /// Bytes codificados del formato de salida.
     pub data: Vec<u8>,
@@ -142,6 +148,8 @@ mod tests {
             .with_effort(9)
             .with_lossless(true);
         assert_eq!((o.quality, o.effort, o.lossless), (60, 9, true));
+        let f = Options::default().with_format(crate::Format::Avif);
+        assert_eq!(f.format, Some(crate::Format::Avif));
     }
 
     #[test]
@@ -150,5 +158,10 @@ mod tests {
         assert!(Options::default().with_quality(101).validate().is_err());
         assert!(Options::default().with_effort(10).validate().is_err());
         assert!(Options::default().validate().is_ok());
+        let zero = Options {
+            max_pixels: 0,
+            ..Default::default()
+        };
+        assert!(zero.validate().is_err());
     }
 }

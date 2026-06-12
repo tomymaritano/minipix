@@ -145,7 +145,7 @@ out = convert(data, format="avif", quality=60)
 
 ```rust
 // crates.io — síncrono; helper de batch paralelo con rayon como feature
-let out = minipix_core::convert(&buf, Options::format(Format::Avif).quality(60))?;
+let out = minipix_core::convert(&buf, &Options::default().with_format(Format::Avif).with_quality(60))?;
 ```
 
 ### Flujo de datos
