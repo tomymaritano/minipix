@@ -4,6 +4,8 @@
 pub mod error;
 /// Tipos de formato de imagen soportados.
 pub mod format;
+/// Decoded RGBA8 image representation.
+pub mod image;
 /// Compression and conversion options.
 pub mod options;
 /// Detección de formato de imagen por magic bytes.
@@ -11,4 +13,5 @@ pub mod sniff;
 
 pub use error::Error;
 pub use format::Format;
+pub use image::DecodedImage;
 pub use options::{Options, Output};

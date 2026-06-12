@@ -41,7 +41,11 @@
       "Bash(curl -s \"https://api.github.com/repos/allyourcodebase/libpng\")",
       "PowerShell(cargo --version)",
       "PowerShell(rustc --version)",
-      "WebFetch(domain:pyo3.rs)"
+      "WebFetch(domain:pyo3.rs)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cd \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; cargo clippy --workspace --all-targets -- -D warnings 2>&1)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cd \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; cargo fmt --check 2>&1)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cd \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; cargo test -p minipix-core 2>&1)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); cd \"C:\\\\Users\\\\Tomy\\\\Documents\\\\compressor\"; git add -A; if \\($?\\) { git commit -m \"feat\\(core\\): DecodedImage RGBA8 + composicion sobre blanco\" })"
     ]
   }
 }
