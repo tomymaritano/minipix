@@ -151,7 +151,51 @@ For design rationale see [`docs/superpowers/specs/2026-06-11-minipix-design.md`]
 
 ## Playground (M2)
 
-A 100% client-side WebAssembly playground is coming in milestone M2. No server required — compress and convert images entirely in the browser.
+A **100% client-side** WebAssembly playground: drag and drop images, compress and convert them entirely in the browser. The image never leaves your machine — no server, no telemetry on content.
+
+### Wasm vs native codec comparison
+
+| Format | Native | Wasm (browser) | Parity |
+| --- | --- | --- | --- |
+| PNG | `png` + `oxipng` | `png` + `oxipng` (Rust pure) | Byte-identical — hard assert in CI |
+| JPEG | `mozjpeg` | `jpeg-encoder` (Rust pure) | Lower density by design — documented |
+| WebP | `libwebp` (lossy + lossless) | `image-webp` lossless-only | Lossless path; separate goldens (`goldens-wasm.json`) |
+| AVIF encode | `ravif` / `rav1e` | `ravif` / `rav1e` (Rust pure) | Byte-identical — hard assert in CI |
+| AVIF decode | `avif-decode` / `libaom` | Browser `createImageBitmap` | Delegated to browser |
+
+### Known limitations
+
+- **AVIF encode is slow** in the browser (single-threaded; multi-thread via `wasm-bindgen-rayon` is M3).
+- **Safari < 17**: no AVIF conversion (no `createImageBitmap` for AVIF).
+- **Safari < 16.4**: no AVIF preview.
+- WebP output is lossless-only in wasm (no lossy WebP encoder in pure Rust under a permissive license).
+
+### Bundle size
+
+1.46 MB raw / ~0.62 MB gzip (`wasm-release` profile + `wasm-opt -Oz`).
+
+### Build locally
+
+Requires Rust stable + `wasm-pack` / `wasm-bindgen-cli`. On Windows, LLVM/clang must be on `PATH` (needed by some Rust deps that call the C compiler for wasm).
+
+```powershell
+# 1. Build the wasm artefact
+.\crates\wasm\build.ps1
+
+# 2. Run the playground dev server
+cd playground
+npm install
+npm run dev
+```
+
+### E2E tests
+
+```powershell
+cd playground
+npm run e2e
+```
+
+Playwright smoke tests load the page, compress a test vector in the browser, and assert size reduction plus byte-identical output for PNG and AVIF against the goldens.
 
 ### Playground deploy
 
