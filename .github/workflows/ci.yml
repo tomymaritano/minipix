@@ -127,6 +127,12 @@ jobs:
           '
       - run: npm ci
         working-directory: playground
+      - run: npm run lint
+        working-directory: playground
+      - run: npm run check
+        working-directory: playground
+      - run: npm test
+        working-directory: playground
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
         working-directory: playground

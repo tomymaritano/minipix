@@ -48,6 +48,7 @@ test('comprime un PNG con paridad de goldens (camino puro-Rust hasta el browser)
 
   // Capture download bytes directly from blob URL
   const downloadLink = page.locator('a.btn-download').first();
+  // resultUrl se crea en un $effect un tick DESPUÉS del badge done — esperar el link, no solo el badge.
   await expect(downloadLink).toBeVisible();
 
   const bytes = await captureDownloadBytes(page, downloadLink);
@@ -67,6 +68,7 @@ test('convierte PNG a AVIF en el browser', async ({ page }) => {
   await expect(page.locator('.badge--done').first()).toBeVisible({ timeout: 120_000 });
 
   const downloadLink = page.locator('a.btn-download').first();
+  // resultUrl se crea en un $effect un tick DESPUÉS del badge done — esperar el link, no solo el badge.
   await expect(downloadLink).toBeVisible();
 
   const bytes = await captureDownloadBytes(page, downloadLink);
@@ -87,6 +89,7 @@ test('acepta AVIF input y convierte a JPEG (sanity magic bytes)', async ({ page 
   await expect(page.locator('.badge--done').first()).toBeVisible({ timeout: 60_000 });
 
   const downloadLink = page.locator('a.btn-download').first();
+  // resultUrl se crea en un $effect un tick DESPUÉS del badge done — esperar el link, no solo el badge.
   await expect(downloadLink).toBeVisible();
 
   const bytes = await captureDownloadBytes(page, downloadLink);

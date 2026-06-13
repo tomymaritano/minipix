@@ -61,10 +61,11 @@ class PlaygroundState {
       };
 
       this.jobs.push(job);
-      // Use the reactive proxy from the array (not the raw `job` reference) so that
-      // property mutations in #runJob (status, result, etc.) go through Svelte's
-      // reactive setter and trigger DOM re-renders.
-      void this.#runJob(this.jobs[this.jobs.length - 1]!);
+      // Re-leer del array $state: la referencia cruda NO es el proxy reactivo
+      // (mutar la cruda no dispara re-renders — bug encontrado por el E2E).
+      // Use find-by-id (no non-null assertion) to satisfy strictTypeChecked + noUncheckedIndexedAccess.
+      const proxied = this.jobs.find((j) => j.id === job.id);
+      if (proxied) void this.#runJob(proxied);
     }
   }
 
