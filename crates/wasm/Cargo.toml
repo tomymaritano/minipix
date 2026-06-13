@@ -1,0 +1,23 @@
+[package]
+name = "minipix-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+minipix-core = { path = "../core", version = "0.1.0", default-features = false, features = ["wasm"] }
+wasm-bindgen = "0.2.123"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+console_error_panic_hook = { version = "0.1.7", optional = true }
+
+[features]
+default = []
+debug-panics = ["dep:console_error_panic_hook"]
+
+[lints]
+workspace = true

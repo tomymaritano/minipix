@@ -70,6 +70,7 @@ fn palette_size(quality: u8) -> u16 {
 }
 
 /// `effort` 0-9 → preset oxipng 0..=6 (7+ activa zopfli).
+// NUNCA setear Options.timeout: usa Instant::now() que trappea en wasm32 (plan M2).
 fn oxipng_options(effort: u8) -> oxipng::Options {
     let mut o = oxipng::Options::from_preset(effort.min(6));
     if effort >= 7 {

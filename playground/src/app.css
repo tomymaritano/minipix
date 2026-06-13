@@ -1,0 +1,76 @@
+/* minipix — sensible resets + dark-ish design tokens */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ── Design tokens (dark-ish neutral palette) ─────────────────────────── */
+:root {
+  /* Backgrounds */
+  --color-bg: #111214;
+  --color-surface: #1a1c1f;
+
+  /* Borders */
+  --color-border: #2d3035;
+
+  /* Text */
+  --color-text: #e8eaed;
+  --color-text-secondary: #a8adb6;
+  --color-muted: #62666f;
+
+  /* Accent (blue) */
+  --color-accent: #4e8ef7;
+  --color-accent-muted: rgba(78, 142, 247, 0.12);
+
+  /* Semantic */
+  --color-success: #4caf7d;
+  --color-warn: #e8a930;
+  --color-error: #e05c5c;
+}
+
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  line-height: 1.5;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  overflow-wrap: break-word;
+}

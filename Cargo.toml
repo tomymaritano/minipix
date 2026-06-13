@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/node", "crates/python"]
+members = ["crates/core", "crates/node", "crates/python", "crates/wasm"]
 
 [workspace.package]
 version = "0.1.0"
@@ -10,6 +10,14 @@ repository = "https://github.com/tomymaritano/minipix"
 
 [profile.dev.package.rav1e]
 opt-level = 3
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

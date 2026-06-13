@@ -2,11 +2,13 @@
   "flat_colors.compress.png.q75e4": "01061829b5c7094ef5ed002a9c362ec08c136f3a2f1bd9b7e25e10b3f5682019",
   "flat_colors.convert.avif.q75e4": "d11c957430a33dc0b50dab78121e513bedcf69b3d585b8fdf208d40f59432308",
   "flat_colors.convert.jpeg.q75e4": "cd80f30bf6fd91d84d8e7859830992d412a983f97a70da566f4dd7964693d82d",
+  "flat_colors.convert.webp.lossless": "7a9fa3b95a69b5e9069b575a312f477ed0714e033595dafb43a6e901191503d2",
   "flat_colors.convert.webp.q75e4": "9c46cbbd8481205d4769e38ca9a85d60c83ea12e1faf878ddd79a1fc47d7664a",
   "flat_colors.input.png": "f790c8d559a010f104701195c31b93d254c2ad542ba4f3cb2200b693c1797d41",
   "gradient_circle.compress.png.q75e4": "d0b76d9683073b6724980d783f354cb715fecca9137d5590dd8634b0a3384843",
   "gradient_circle.convert.avif.q75e4": "781693989715ae6de4ab030c9fc4eb349c6c7e8f70bce5e9c71b12b793f87956",
   "gradient_circle.convert.jpeg.q75e4": "746a7938a40c7ef06c1f07abd94bb20572a21ce9db84fc7c73c72dd0b09de0bf",
+  "gradient_circle.convert.webp.lossless": "06f6f8a5841ebccfee800a5661c05f823562f4907b10797ea5562471018aa395",
   "gradient_circle.convert.webp.q75e4": "aabc27758b43136a8280f6892899354bce193e4e0ec3337e315ff4c0aa74e605",
   "gradient_circle.input.png": "dda9f4b031642ba5ef5339a64d841de8f5bf6925890f18f7df65fa96222b343e"
 }

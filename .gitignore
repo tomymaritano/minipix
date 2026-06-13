@@ -21,6 +21,9 @@ dist/
 *.dylib
 pkg/
 
+# WASM playground output (generado por build.ps1)
+playground/src/lib/wasm/
+
 # IDE / SO
 .DS_Store
 Thumbs.db

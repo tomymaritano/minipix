@@ -4,10 +4,10 @@ SDK de compresión/conversión de imágenes (PNG, JPEG, WebP, AVIF) con core en 
 
 ## Reglas de arquitectura (duras)
 
-1. **Toda la lógica vive en `crates/core`.** Los bindings (`node`, `python`, `wasm`) solo convierten tipos, errores y manejan async. Si un binding necesita un `if` de negocio, ese `if` va al core.
+1. **Toda la lógica vive en `crates/core`.** Los bindings (`crates/node`, `crates/python`, `crates/wasm`) solo convierten tipos, errores y manejan async. Si un binding necesita un `if` de negocio, ese `if` va al core.
 2. **Códecs solo detrás de los traits `ImageDecoder`/`ImageEncoder`** contra `DecodedImage`. Nada fuera de `crates/core/src/codecs/` llama a un crate de códec directamente.
 3. **Paridad byte a byte entre bindings nativos** es promesa contractual. Cualquier cambio que altere bytes de salida regenera los goldens de forma explícita y se justifica en el PR (tolerancias: SSIM −0.005 / tamaño +3%, spec §9).
-4. **Ningún pánico cruza la FFI**: `catch_unwind` en el borde de cada binding. Un pánico se reporta como error interno, jamás aborta el proceso anfitrión.
+4. **Ningún pánico cruza la FFI**: `catch_unwind` en el borde de cada binding. Un pánico se reporta como error interno, jamás aborta el proceso anfitrión. Excepción wasm (M2): en stable `panic=abort` no hay `catch_unwind` — el contrato es respawn del worker ante `RuntimeError`/trap (ver `crates/wasm/src/lib.rs` y `playground/src/lib/pool.ts`).
 5. **Árbol de licencias permisivo** (MIT/Apache/BSD/Zlib/IJG/NCSA). Nada GPL/LGPL/AGPL — lo aplica `cargo deny check` en CI; no agregar excepciones a `deny.toml` sin discutirlo primero. Excepción documentada: MPL-2.0 (avif-parse, copyleft débil a nivel de archivo — no modificamos el crate; ver deny.toml).
 
 ## Git flow
@@ -41,10 +41,14 @@ Cero warnings en `main`. Un warning nuevo es un fallo de CI, no una advertencia.
 - Build: `cargo build --workspace`
 - Tests: `cargo test --workspace`
 - Lint completo: `cargo fmt --check; cargo clippy --workspace --all-targets -- -D warnings; cargo deny check`
-- Playground (M2): `npm run dev` / `npm run lint` en `playground/`
+- Build playground wasm: `crates/wasm/build.ps1`
+- Playground dev: `cd playground; npm run dev`
+- Playground E2E: `cd playground; npm run e2e`
+- Playground lint: `cd playground; npm run lint`
 
 ## Testing
 
 - TDD: test primero, implementación después (skill `superpowers:test-driven-development`).
 - Todo cambio en `crates/core/src/codecs/` corre la suite de conformance contra los vectores de `tests/vectors/`.
 - Los benchmarks (criterion) no bloquean CI pero acompañan cualquier PR que afirme una mejora de rendimiento.
+- Goldens: regenerar nativos con `MINIPIX_REGEN_GOLDENS=1 cargo test -p minipix-core --test conformance`; los wasm (webp lossless) con `crates/wasm/build-node-test.ps1` + `MINIPIX_REGEN_WASM_GOLDENS=1 node crates/wasm/tests/smoke.mjs`. Ambos cambios se justifican en el PR.

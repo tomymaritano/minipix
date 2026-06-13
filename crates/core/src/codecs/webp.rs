@@ -1,4 +1,4 @@
-//! WebP: decode con image-webp (Rust puro) + encode con libwebp-sys2 (FFI).
+//! WebP: decode con image-webp (Rust puro) + encode con libwebp-sys2 (FFI, native) o image-webp (wasm).
 //!
 //! Este es el ÚNICO módulo unsafe del workspace. El bloque unsafe vive en
 //! `mod ffi` protegido por `#[allow(unsafe_code)]`; el resto del crate sigue
@@ -64,6 +64,7 @@ impl ImageDecoder for WebpCodec {
     }
 }
 
+#[cfg(feature = "native")]
 impl ImageEncoder for WebpCodec {
     fn encode(&self, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>, Error> {
         ffi::encode_rgba(
@@ -81,11 +82,34 @@ impl ImageEncoder for WebpCodec {
     }
 }
 
+#[cfg(all(feature = "wasm", not(feature = "native")))]
+impl ImageEncoder for WebpCodec {
+    fn encode(&self, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>, Error> {
+        // Fallback wasm: SOLO lossless (image-webp no tiene encoder lossy; documentado).
+        if !opts.lossless && opts.quality != 100 {
+            return Err(Error::InvalidOptions(
+                "lossy WebP encode is not available in the wasm build (use lossless: true)".into(),
+            ));
+        }
+        let mut out = Vec::new();
+        image_webp::WebPEncoder::new(std::io::Cursor::new(&mut out))
+            .encode(
+                &img.pixels,
+                img.width,
+                img.height,
+                image_webp::ColorType::Rgba8,
+            )
+            .map_err(encode_err)?;
+        Ok(out)
+    }
+}
+
 /// FFI con libwebp: ÚNICO módulo unsafe del workspace (CLAUDE.md).
 ///
 /// Toda la memoria C se limpia en TODOS los caminos (éxito y error) mediante
 /// guards RAII (`PictureGuard` y `WriterGuard`) que llaman a los destructores
 /// de libwebp desde sus implementaciones `Drop`.
+#[cfg(feature = "native")]
 #[allow(unsafe_code)]
 mod ffi {
     use libwebp_sys as sys;
@@ -337,6 +361,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn encode_lossy_decode_y_quality_order() {
         let img = vector_gradient_circle(64, 64);
@@ -350,6 +375,7 @@ mod tests {
         assert!(q40.len() < q90.len());
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn encode_lossless_roundtrip_exacto() {
         let img = crate::testutil::vector_flat_colors(32, 32);
@@ -360,6 +386,7 @@ mod tests {
         assert_eq!(back.pixels, img.pixels);
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn preserva_alpha() {
         let img = vector_gradient_circle(32, 32); // círculo alpha=128
@@ -371,6 +398,7 @@ mod tests {
     }
 
     // Fix 5: dimension-limit test
+    #[cfg(feature = "native")]
     #[test]
     fn dimension_mayor_a_16383_da_error_claro() {
         // WebP no soporta >16383 por eje: 16390x1.

@@ -1,0 +1,44 @@
+# Deploy del playground a Cloudflare Pages.
+# Setup único (dueño del repo):
+#   1. Dashboard Cloudflare → Workers & Pages → Create → Pages → nombre "minipix" (sin conectar git).
+#   2. Secretos del repo GitHub: CLOUDFLARE_API_TOKEN (token con permiso Cloudflare Pages:Edit)
+#      y CLOUDFLARE_ACCOUNT_ID.
+# Sin _headers: el playground v1 no usa SharedArrayBuffer (threads wasm). Si M3
+# agrega threads: /* + Cross-Origin-Opener-Policy: same-origin + Cross-Origin-Embedder-Policy: require-corp.
+name: deploy-playground
+on:
+  push:
+    branches: [master]
+    paths: ["playground/**", "crates/wasm/**", "crates/core/**", ".github/workflows/deploy-playground.yml"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-unknown-unknown }
+      - uses: Swatinem/rust-cache@v2
+      - run: which clang
+      - run: cargo install wasm-bindgen-cli --version 0.2.123 --locked
+      - run: sudo apt-get update && sudo apt-get install -y binaryen
+      - name: Build wasm (perfil wasm-release + wasm-opt)
+        run: |
+          cargo build -p minipix-wasm --target wasm32-unknown-unknown --profile wasm-release
+          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/minipix_wasm.wasm --out-dir playground/src/lib/wasm --target web --out-name minipix_wasm
+          wasm-opt playground/src/lib/wasm/minipix_wasm_bg.wasm -o playground/src/lib/wasm/minipix_wasm_bg.wasm -Oz --enable-bulk-memory --enable-nontrapping-float-to-int
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: playground
+      - run: npm run build
+        working-directory: playground
+      - uses: cloudflare/wrangler-action@v4   # pages-action está ARCHIVADO — no usar
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy playground/dist --project-name=minipix

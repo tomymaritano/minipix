@@ -19,6 +19,11 @@
 //! # Ok::<(), minipix_core::Error>(())
 //! ```
 
+#[cfg(not(any(feature = "native", feature = "wasm")))]
+compile_error!(
+    "minipix-core requires exactly one codec profile: enable feature \"native\" (default) or \"wasm\"."
+);
+
 pub mod api;
 pub(crate) mod codecs;
 /// Conversión de espacio de color ICC → sRGB para decoders.
@@ -37,7 +42,7 @@ pub mod sniff;
 #[cfg(test)]
 pub(crate) mod testutil;
 
-pub use api::{compress, convert};
+pub use api::{compress, convert, encode_rgba};
 pub use error::Error;
 pub use format::Format;
 pub use image::DecodedImage;

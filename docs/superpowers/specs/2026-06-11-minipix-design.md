@@ -160,17 +160,53 @@ bytes → sniff (magic bytes) → Decoder del formato
 
 SPA estática donde se arrastran imágenes y se comprimen **enteramente en el navegador**: el core compilado a WASM, cero backend, cero telemetría sobre el contenido — el argumento de privacidad contra TinyPNG hecho producto.
 
-**Stack**: Vite + Svelte + TypeScript. El core entra vía `crates/wasm` (wasm-bindgen). La compresión corre en un **Web Worker** (la UI nunca se congela); threads WASM (rayon vía `wasm-bindgen-rayon`) habilitados con headers COOP/COEP — crítico para que AVIF encode sea tolerable en el browser.
+### 7.1 Stack frontend
+
+Vite 8 + Svelte 5 runes + TypeScript. El core entra vía `crates/wasm` (wasm-bindgen 0.2.123). Protocolo de comunicación: postMessage propio (sin Comlink — el overhead de Comlink no justifica la abstracción para un protocolo de dos mensajes). Librerías adicionales: `img-comparison-slider` (comparador antes/después), `fflate` (zip client-side). Deploy: `wrangler-action@v4` a Cloudflare Pages (`wrangler-action/pages-action` está archivado — se usa el action general con `command: pages deploy`).
+
+### 7.2 Build WASM — perfil puro-Rust (M2 entregado)
+
+El binding `crates/wasm` compila con **perfil 100% Rust estable**, target `wasm32-unknown-unknown`, activando `features = ["wasm"]` en el core. No requiere emscripten ni toolchain C adicional.
+
+**Códecs en wasm (real, M2)**:
+
+| Formato | wasm (M2) | Diferencia vs nativo |
+| --- | --- | --- |
+| PNG | `png` + `oxipng` (Rust puro) | **Idéntico byte a byte** — paridad verificada |
+| JPEG | `jpeg-encoder` (Rust puro) | Menor densidad que mozjpeg — diferencia esperada y documentada |
+| WebP | `image-webp` lossless-only (Rust puro) | Solo lossless; encoder distinto → goldens separados (`goldens-wasm.json`) |
+| AVIF decode | `createImageBitmap` del navegador → `encodeRgba` | Delegado al navegador; sin libaom en wasm |
+| AVIF encode | `ravif` / `rav1e` (Rust puro) | **Idéntico byte a byte** — paridad verificada; single-thread (lento en browser) |
+
+**Paridad medida**: PNG y AVIF son byte-idénticos entre la ruta wasm y la nativa. Esta paridad la afirman los smoke tests y los E2E de Playwright contra los goldens en `tests/conformance/goldens.json`. El assert es duro — una regresión rompe CI. WebP lossless difiere por encoder (goldens separados en `goldens-wasm.json`); JPEG difiere por diseño.
+
+**Ruta emscripten (spike M3)**: `wasm-bindgen` soporta targets emscripten desde 0.2.115/0.2.122 (semanas de madurez en junio 2026). La ruta queda como spike M3 con criterios de salida explícitos: los tres crates `-sys` (`mozjpeg-sys`, `libwebp-sys2`, `avif-decode`) linkan bajo `emcc` vanilla sin parchear, los pánicos de JPEG unwinden sin matar la instancia wasm, el output con `MODULARIZE=1` carga correctamente en un worker de Vite, y el tamaño y determinismo son aceptables (≤ 4 MB gzip, mismos bytes en runs consecutivos). Si los criterios se cumplen: JPEG y WebP lossy alcanzan paridad de densidad con nativo, y AVIF encode recupera libaom.
+
+### 7.3 Paralelismo — worker pool (sin COOP/COEP)
+
+La compresión corre en un **pool de Web Workers** (capacidad 3, una imagen por worker, buffers transferidos via `Transferable`). La UI nunca se congela. **No se requieren headers COOP/COEP ni SharedArrayBuffer** — el pool no usa memoria compartida.
+
+Threads WASM vía `wasm-bindgen-rayon` siguen siendo nightly-only (junio 2026) y quedan para M3. Si llegaran: son 2 líneas de `_headers` en Cloudflare Pages (COOP/COEP), sin cambios de código.
+
+### 7.4 Pánicos en wasm — carve-out de la regla 4
+
+En Rust estable con `panic=abort`, no hay `catch_unwind` disponible — un pánico produce un trap de wasm (`RuntimeError: unreachable` en V8/SpiderMonkey). Contrato: el pool detecta el `RuntimeError` del worker, lo reporta como `InternalPanic` o `WasmInitError`, y respawnea el worker antes de continuar. Ver implementación: `crates/wasm/src/lib.rs` y `playground/src/lib/pool.ts`.
+
+### 7.5 Artefacto y hosting
+
+- **Tamaño**: 1.46 MB raw / ~0.62 MB gzip (perfil `wasm-release` + `wasm-opt -Oz`).
+- **Hosting**: Cloudflare Pages. GitHub Pages descartado (no permite headers custom — relevante si M3 habilita threads). M2 NO incluye `_headers`: no se usa SharedArrayBuffer; cuando M3 habilite threads wasm son 2 líneas de COOP/COEP en Pages.
+- **Deploy**: automático vía `wrangler-action@v4` en cada push a `master` que toque `playground/`, `crates/wasm/`, `crates/core/`, o el workflow de deploy.
 
 **Funcionalidad**:
 
 - Drag & drop + selector de archivos; múltiples imágenes a la vez.
-- Controles por imagen (con defaults globales): formato destino, `quality`, `effort`, `lossless`, `keepMetadata` — los mismos nombres y semántica que el SDK; el playground ES la demo de la API.
-- Comparador antes/después con slider y zoom (estilo Squoosh).
+- Controles por imagen (con defaults globales): formato destino, `quality`, `effort`, `lossless` — los mismos nombres y semántica que el SDK; el playground ES la demo de la API.
+- Comparador antes/después con slider y zoom (estilo Squoosh, vía `img-comparison-slider`).
 - Bytes entrada/salida y % de ahorro por archivo y total.
-- Descarga individual o todo junto (zip generado client-side).
+- Descarga individual o todo junto (zip generado client-side vía `fflate`).
 
-**Hosting**: Cloudflare Pages (gratis, soporta archivo `_headers` para COOP/COEP, deploy desde CI). GitHub Pages queda descartado: no permite headers custom, y sin COOP/COEP no hay threads WASM.
+**Alcance**: el binding `crates/wasm` existe para servir al playground; **no** se publica como paquete npm en v1 (eso queda para v2 junto con edge runtimes).
 
 **Alcance**: el binding `crates/wasm` existe para servir al playground; **no** se publica como paquete npm en v1 (eso queda para v2 junto con edge runtimes).
 
@@ -200,7 +236,7 @@ SPA estática donde se arrastran imágenes y se comprimen **enteramente en el na
 - **crates.io**: `cargo publish` del core; los usuarios de Rust compilan de fuente (norma del ecosistema). Documentar requisitos: cmake + nasm (mozjpeg), y meson solo si queda dav1d.
 - **Release**: un tag → publica a los tres registros con la misma versión.
 - Toolchain de CI para deps C: nasm (mozjpeg), cmake (libwebp), meson (solo si la contingencia dav1d se activa).
-- **M2**: job WASM (emscripten + wasm-bindgen) que compila `crates/wasm`, build del playground (Vite) y deploy automático a Cloudflare Pages con `_headers` COOP/COEP.
+- **M2**: jobs WASM (cargo wasm-release + wasm-bindgen + wasm-opt, perfil puro-Rust — sin emscripten) que compilan `crates/wasm`, smoke Node, E2E Playwright y deploy del playground a Cloudflare Pages (sin `_headers`; ver §7.5).
 
 ## 11. Riesgos y mitigaciones
 

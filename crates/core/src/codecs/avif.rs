@@ -1,4 +1,4 @@
-//! AVIF: encode con ravif (rav1e, Rust puro); decode con avif-decode (libaom/aom-decode).
+//! AVIF: encode con ravif (rav1e, Rust puro); decode con avif-decode (libaom/aom-decode, native).
 use crate::codecs::ImageEncoder;
 use crate::error::Error;
 use crate::format::Format;
@@ -15,6 +15,7 @@ fn encode_err(e: impl std::fmt::Display) -> Error {
     }
 }
 
+#[cfg(feature = "native")]
 fn decode_err(e: impl std::fmt::Display) -> Error {
     Error::Decode {
         format: Format::Avif,
@@ -66,6 +67,7 @@ impl ImageEncoder for AvifCodec {
 
 use crate::codecs::ImageDecoder;
 
+#[cfg(feature = "native")]
 impl ImageDecoder for AvifCodec {
     fn decode(&self, data: &[u8], max_pixels: u64) -> Result<DecodedImage, Error> {
         // ANTI-BOMBA real: dimensiones del sequence header AV1 (OBU) vía avif-parse,
@@ -185,6 +187,18 @@ impl ImageDecoder for AvifCodec {
     }
 }
 
+#[cfg(all(feature = "wasm", not(feature = "native")))]
+impl ImageDecoder for AvifCodec {
+    fn decode(&self, _data: &[u8], _max_pixels: u64) -> Result<DecodedImage, Error> {
+        // En wasm el navegador decodifica AVIF (createImageBitmap) y el worker
+        // alimenta RGBA vía encode_rgba(); el core lo rechaza tipado.
+        Err(Error::Decode {
+            format: Format::Avif,
+            detail: "AVIF decode is not available in the wasm build (decode in the browser and use encodeRgba)".into(),
+        })
+    }
+}
+
 // Cobertura pendiente (backlog): variantes 16-bit y grayscale del normalizador (ravif solo encodea 8-bit; requiere fixture AVIF 10-bit).
 #[cfg(test)]
 mod tests {
@@ -229,6 +243,7 @@ mod tests {
         assert!(matches!(err, crate::Error::InvalidOptions(_)));
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn roundtrip_encode_decode() {
         let img = vector_gradient_circle(32, 24);
@@ -246,6 +261,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn decode_error_tipado_con_basura() {
         let mut junk = vec![0x00, 0x00, 0x00, 0x1C];
@@ -257,6 +273,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn decode_limite_de_pixeles() {
         let img = vector_gradient_circle(32, 24); // 768 px

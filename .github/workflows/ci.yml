@@ -15,6 +15,8 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - run: rustup target add wasm32-unknown-unknown
+      - run: cargo check -p minipix-core --target wasm32-unknown-unknown --no-default-features --features wasm
       - uses: EmbarkStudios/cargo-deny-action@v2
 
   node-binding:
@@ -51,3 +53,89 @@ jobs:
       - run: pip install dist/minipix-*.whl
       - run: pytest tests/ -v
         working-directory: crates/python
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "wasm32-unknown-unknown" }
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: which clang # oxipng/freestanding compila libdeflate C con clang
+      # wasm-bindgen-cli: pinned to match crate version 0.2.123
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version 0.2.123 --locked
+      - name: Build wasm (wasm-release profile)
+        run: cargo build -p minipix-wasm --target wasm32-unknown-unknown --profile wasm-release
+      - name: Generate nodejs wasm bindings
+        run: |
+          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/minipix_wasm.wasm \
+            --out-dir target/wasm-node-test \
+            --target nodejs \
+            --out-name minipix_wasm
+      - name: Run wasm conformance smoke test
+        run: node crates/wasm/tests/smoke.mjs
+
+  playground:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: ilammy/setup-nasm@v1
+        with:
+          version: "2.16.03"
+      - run: which clang
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version 0.2.123 --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build wasm web artifact
+        run: |
+          cargo build -p minipix-wasm --target wasm32-unknown-unknown --profile wasm-release
+          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/minipix_wasm.wasm \
+            --out-dir playground/src/lib/wasm \
+            --target web \
+            --out-name minipix_wasm
+      - name: Optimize wasm with wasm-opt (binaryen via apt)
+        run: |
+          sudo apt-get install -y binaryen
+          wasm-opt playground/src/lib/wasm/minipix_wasm_bg.wasm \
+            -o playground/src/lib/wasm/minipix_wasm_bg.wasm \
+            -Oz --enable-bulk-memory --enable-nontrapping-float-to-int
+      - name: Build wasm-node-test for fixture generation
+        run: |
+          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/minipix_wasm.wasm \
+            --out-dir target/wasm-node-test \
+            --target nodejs \
+            --out-name minipix_wasm
+      - name: Generate AVIF fixture
+        run: |
+          node -e '
+            const wasmMod = require("./target/wasm-node-test/minipix_wasm.js");
+            const fs = require("fs");
+            fs.mkdirSync("playground/e2e/fixtures", {recursive: true});
+            const input = fs.readFileSync("tests/vectors/flat_colors.png");
+            const result = wasmMod.convert(input, {format: "avif", effort: 4});
+            fs.writeFileSync("playground/e2e/fixtures/tiny.avif", Buffer.from(result.data));
+            console.log("tiny.avif written, bytes:", result.data.byteLength);
+          '
+      - run: npm ci
+        working-directory: playground
+      - run: npm run lint
+        working-directory: playground
+      - run: npm run check
+        working-directory: playground
+      - run: npm test
+        working-directory: playground
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: playground
+      - name: Run e2e tests
+        run: npm run e2e
+        working-directory: playground
