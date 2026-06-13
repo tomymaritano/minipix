@@ -25,12 +25,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: which clang
       - run: cargo install wasm-bindgen-cli --version 0.2.123 --locked
-      - run: sudo apt-get update && sudo apt-get install -y binaryen
+      # binaryen pineado (apt trae 108, rechaza sign-ext que Rust emite por default)
+      - run: curl -sL https://github.com/WebAssembly/binaryen/releases/download/version_130/binaryen-version_130-x86_64-linux.tar.gz | tar xz -C /tmp
       - name: Build wasm (perfil wasm-release + wasm-opt)
         run: |
           cargo build -p minipix-wasm --target wasm32-unknown-unknown --profile wasm-release
           wasm-bindgen target/wasm32-unknown-unknown/wasm-release/minipix_wasm.wasm --out-dir playground/src/lib/wasm --target web --out-name minipix_wasm
-          wasm-opt playground/src/lib/wasm/minipix_wasm_bg.wasm -o playground/src/lib/wasm/minipix_wasm_bg.wasm -Oz --enable-bulk-memory --enable-nontrapping-float-to-int
+          /tmp/binaryen-version_130/bin/wasm-opt playground/src/lib/wasm/minipix_wasm_bg.wasm -o playground/src/lib/wasm/minipix_wasm_bg.wasm -Oz --enable-bulk-memory --enable-nontrapping-float-to-int
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm ci
