@@ -148,4 +148,36 @@ mod tests {
         data.extend(b"avif");
         assert_eq!(sniff(&data), Some(Format::Avif));
     }
+
+    #[test]
+    fn mp4_isom_es_none() {
+        // MP4 con brands isom/mp42 (ningún avif) → None.
+        let mut data = vec![0x00, 0x00, 0x00, 0x18];
+        data.extend(b"ftypisom");
+        data.extend(b"\x00\x00\x02\x00");
+        data.extend(b"mp42");
+        assert_eq!(sniff(&data), None);
+    }
+
+    #[test]
+    fn avif_desalineado_no_matchea() {
+        // 'avif' en offset 17 (no alineado a 4) NO debe matchear: los brands
+        // son de 4 bytes alineados desde el offset 16.
+        let mut data = vec![0x00, 0x00, 0x00, 0x1C];
+        data.extend(b"ftypmif1"); // major mif1
+        data.extend(b"\x00\x00\x00\x00"); // minor version 12..16
+        data.push(0x00); // byte 16 (relleno)
+        data.extend(b"avif"); // 'avif' en 17..21 — desalineado
+        data.extend([0u8; 3]);
+        assert_eq!(sniff(&data), None);
+    }
+
+    #[test]
+    fn ftyp_minimo_de_16_bytes_no_panica() {
+        // Caja mínima de 16 bytes (sin compatible_brands): el loop no debe correr.
+        let mut data = vec![0x00, 0x00, 0x00, 0x10]; // size 16
+        data.extend(b"ftypmif1"); // major mif1, no avif
+        data.extend(b"\x00\x00\x00\x00"); // minor version, total 16 bytes
+        assert_eq!(sniff(&data), None);
+    }
 }
