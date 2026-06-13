@@ -61,7 +61,10 @@ class PlaygroundState {
       };
 
       this.jobs.push(job);
-      void this.#runJob(job);
+      // Use the reactive proxy from the array (not the raw `job` reference) so that
+      // property mutations in #runJob (status, result, etc.) go through Svelte's
+      // reactive setter and trigger DOM re-renders.
+      void this.#runJob(this.jobs[this.jobs.length - 1]!);
     }
   }
 
@@ -102,7 +105,9 @@ class PlaygroundState {
           kind,
           data: buffer,
           fileName: job.file.name,
-          options: job.options,
+          // Spread to get a plain (non-proxied) object — Svelte 5's reactive proxy
+          // cannot be structured-cloned for postMessage transfer.
+          options: { ...job.options },
         },
         (phase) => {
           job.phase = phase;
