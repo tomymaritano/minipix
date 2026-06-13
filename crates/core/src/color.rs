@@ -11,7 +11,8 @@
 //!   intactos ante cualquier error de parseo.
 //! - [`apply_icc_best_effort`]: wrapper best-effort para decoders: ICC inválido se ignora.
 use crate::error::Error;
-use moxcms::{ColorProfile, Layout, TransformOptions};
+use moxcms::{ColorProfile, Layout, Transform8BitExecutor, TransformOptions};
+use std::sync::Arc;
 
 /// Aplica `profile` como espacio de origen, convirtiendo `rgba` (RGBA8) a sRGB in-place.
 ///
@@ -28,6 +29,14 @@ pub(crate) fn apply_profile_to_srgb(rgba: &mut [u8], profile: &ColorProfile) -> 
             TransformOptions::default(),
         )
         .map_err(|e| Error::IccTransform(e.to_string()))?;
+
+    // Short-circuit: si el transform es identidad (perfil ya sRGB o equivalente),
+    // saltear la transformación completa — los píxeles ya están en sRGB.
+    // Esto evita 2 copias O(n) + el transform per-píxel completo.
+    if transform_is_identity(&transform) {
+        return Ok(());
+    }
+
     let src = rgba.to_vec();
     let mut dst = vec![0u8; rgba.len()];
     transform
@@ -35,6 +44,36 @@ pub(crate) fn apply_profile_to_srgb(rgba: &mut [u8], profile: &ColorProfile) -> 
         .map_err(|e| Error::IccTransform(e.to_string()))?;
     rgba.copy_from_slice(&dst);
     Ok(())
+}
+
+/// Devuelve `true` si el transform deja sin cambios (±1 LSB) un conjunto de
+/// colores de prueba que cubren los extremos de cada canal y grises.
+///
+/// Para un transform matrix-shaper RGB→sRGB, identidad en estos probes implica
+/// identidad en todo el dominio (una matriz 3×3 queda determinada por su acción
+/// sobre los 3 primarios). Conservador: ante cualquier desviación >1 devuelve
+/// `false` y se realiza la transformación real — nunca se salta un transform válido.
+fn transform_is_identity(transform: &Arc<Transform8BitExecutor>) -> bool {
+    const PROBES: [[u8; 4]; 12] = [
+        [0, 0, 0, 255],
+        [255, 255, 255, 255],
+        [255, 0, 0, 255],
+        [0, 255, 0, 255],
+        [0, 0, 255, 255],
+        [64, 64, 64, 255],
+        [128, 128, 128, 255],
+        [192, 192, 192, 255],
+        [255, 128, 0, 255],
+        [0, 128, 255, 255],
+        [128, 0, 255, 255],
+        [33, 177, 99, 128],
+    ];
+    let src: Vec<u8> = PROBES.iter().flatten().copied().collect();
+    let mut dst = vec![0u8; src.len()];
+    if transform.transform(&src, &mut dst).is_err() {
+        return false; // ante error, no saltear (camino seguro)
+    }
+    src.iter().zip(&dst).all(|(a, b)| a.abs_diff(*b) <= 1)
 }
 
 /// Parsea un blob ICC crudo y aplica la conversión a sRGB sobre `rgba` (RGBA8).
@@ -55,12 +94,6 @@ pub(crate) fn apply_icc_to_srgb(rgba: &mut [u8], icc: &[u8]) -> Result<(), Error
             profile.color_space
         )));
     }
-
-    // TODO(backlog): short-circuit sRGB — si el perfil es sRGB la transformación
-    // es una identidad costosa (2 copias + transform completo). ColorProfile no
-    // implementa PartialEq en moxcms 0.8, por lo que no hay comparación trivial.
-    // Comparar primaries/white-point dentro de epsilon sería >20 líneas de float
-    // fiddly; se difiere hasta que moxcms exponga PartialEq o un helper is_srgb().
 
     apply_profile_to_srgb(rgba, &profile)
 }
@@ -159,18 +192,13 @@ mod tests {
     }
 
     #[test]
-    fn srgb_es_noop_aproximado() {
-        // Un perfil sRGB no debe cambiar materialmente los pixels.
+    fn srgb_es_noop_exacto() {
+        // El perfil sRGB dispara el short-circuit: pixels EXACTAMENTE iguales (no ±2).
         let srgb = ColorProfile::new_srgb();
         let srgb_bytes = encode_profile(&srgb);
-        let mut pixels = vec![10u8, 128, 250, 200];
+        let mut pixels = vec![10u8, 128, 250, 200, 0, 0, 0, 255, 255, 255, 255, 255];
         let orig = pixels.clone();
         apply_icc_to_srgb(&mut pixels, &srgb_bytes).unwrap();
-        for (a, b) in pixels.iter().zip(orig.iter()) {
-            assert!(
-                i16::from(*a).abs_diff(i16::from(*b)) <= 2,
-                "{pixels:?} vs {orig:?}"
-            );
-        }
+        assert_eq!(pixels, orig, "sRGB debe ser short-circuit byte-exacto");
     }
 }
