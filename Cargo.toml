@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = ["crates/core", "crates/node", "crates/python", "crates/wasm"]
+# fuzz/ es su propio workspace (cargo-fuzz, nightly, Linux/macOS únicamente).
+# Excluido para que `cargo build/test/clippy --workspace` no lo toque.
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.1.0"

@@ -86,8 +86,23 @@ impl ImageDecoder for AvifCodec {
         // ANTI-BOMBA real: dimensiones del sequence header AV1 (OBU) vía avif-parse,
         // SIN decodificar el frame. max_frame_* es el máximo de secuencia (cota
         // superior conservadora del tamaño croppeado) — la dirección segura para un guard.
-        let mut cursor = std::io::Cursor::new(data);
-        let parsed = avif_parse::read_avif(&mut cursor).map_err(decode_err)?;
+        //
+        // BUG CONOCIDO avif-parse 1.4.0: `read_avif` llama a `assert!` en lugar de
+        // retornar `Err` en ciertos estados de parser malformado (p.ej. "bad parser
+        // state bytes left"). `catch_unwind` convierte ese pánico en un error tipado
+        // para que NUNCA escape a través de la API pública. Backlog: cuando avif-parse
+        // upstream corrija los assert→error, eliminar este wrap.
+        let data_owned = data.to_vec();
+        let parse_result = std::panic::catch_unwind(move || {
+            let mut cursor = std::io::Cursor::new(data_owned);
+            avif_parse::read_avif(&mut cursor)
+        })
+        .map_err(|_| {
+            decode_err(
+                "avif-parse panicked on malformed input (upstream bug: assert instead of error)",
+            )
+        })?;
+        let parsed = parse_result.map_err(decode_err)?;
         let meta = parsed.primary_item_metadata().map_err(decode_err)?;
         let header_pixels =
             u64::from(meta.max_frame_width.get()) * u64::from(meta.max_frame_height.get());

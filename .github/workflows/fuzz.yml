@@ -1,0 +1,82 @@
+name: fuzz
+
+# cargo-fuzz / libFuzzer solo corre en Linux (no en Windows MSVC).
+# El test de robustez estable (tests/robustness.rs) cubre todas las plataformas en ci.yml.
+on:
+  schedule:
+    # Semanal: lunes 03:17 UTC (offset para no competir con el tráfico pico de CI).
+    - cron: "17 3 * * 1"
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "crates/core/**"
+      - "fuzz/**"
+      - ".github/workflows/fuzz.yml"
+
+jobs:
+  fuzz:
+    name: cargo-fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: sniff
+            max_total_time: "60"
+            rss_limit_mb: "2048"
+          - target: compress
+            max_total_time: "120"
+            rss_limit_mb: "4096"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Cache separada del CI estable para no mezclar artifacts nightly/stable.
+          key: fuzz-nightly
+
+      # NASM 2.16.03 — mismo pin que ci.yml (3.x rompe el check cmake de libaom).
+      - uses: ilammy/setup-nasm@v1
+        with:
+          version: "2.16.03"
+
+      # cmake + clang son requeridos por libaom-sys (codec AVIF nativo).
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake clang
+
+      - name: Cache cargo-fuzz binary
+        uses: actions/cache@v4
+        id: cache-cargo-fuzz
+        with:
+          path: ~/.cargo/bin/cargo-fuzz
+          key: cargo-fuzz-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-fuzz
+        if: steps.cache-cargo-fuzz.outputs.cache-hit != 'true'
+        run: cargo install cargo-fuzz --locked
+
+      - name: Fuzz ${{ matrix.target }}
+        working-directory: fuzz
+        run: |
+          cargo +nightly fuzz run ${{ matrix.target }} \
+            corpus/${{ matrix.target }} \
+            -- \
+            -max_total_time=${{ matrix.max_total_time }} \
+            -rss_limit_mb=${{ matrix.rss_limit_mb }}
+
+      # Si libFuzzer encuentra un crash, guarda el artefacto para diagnóstico.
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-${{ matrix.target }}-${{ github.run_id }}
+          path: |
+            fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore
+          retention-days: 14
