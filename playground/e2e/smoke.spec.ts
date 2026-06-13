@@ -1,100 +1,93 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const ROOT = join(__dirname, '..', '..');
-const sha = (b: Buffer | Uint8Array) => createHash('sha256').update(b).digest('hex');
+const here = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(here, '..', '..');
+const sha = (b: Buffer | Uint8Array): string => createHash('sha256').update(b).digest('hex');
 const goldens = JSON.parse(
   readFileSync(join(ROOT, 'tests/conformance/goldens.json'), 'utf8'),
 ) as Record<string, string>;
 
-// The download anchor uses a blob URL with the `download` attribute.
-// In Playwright, clicking a download link triggers a 'download' event only when
-// the page navigates away (blob: URLs don't trigger it by default in Chromium).
-// We intercept the blob bytes directly via page.evaluate instead.
-async function captureDownloadBytes(
-  page: import('@playwright/test').Page,
-  downloadLocator: import('@playwright/test').Locator,
-): Promise<Buffer> {
-  // Grab the href (blob: URL) before clicking
-  const href = await downloadLocator.getAttribute('href');
-  if (!href) throw new Error('Download link has no href');
-
-  // Fetch the blob content via page context
+/**
+ * El comparador renderiza el resultado como <img alt="Compressed"> con un blob URL.
+ * Esperamos a que aparezca y leemos sus bytes vía fetch en el contexto de la página
+ * (los blob: URLs no disparan el evento download de Playwright de forma fiable).
+ */
+async function compressedBytes(page: Page): Promise<Buffer> {
+  const img = page.locator('img[alt="Compressed"]');
+  await expect(img).toBeVisible({ timeout: 120_000 });
+  const src = await img.getAttribute('src');
+  if (!src) throw new Error('compressed image has no src');
   const bytes = await page.evaluate(async (url: string) => {
-    const response = await fetch(url);
-    const buf = await response.arrayBuffer();
-    return Array.from(new Uint8Array(buf));
-  }, href);
-
+    const r = await fetch(url);
+    const b = await r.arrayBuffer();
+    return Array.from(new Uint8Array(b));
+  }, src);
   return Buffer.from(bytes);
 }
 
-test('comprime un PNG con paridad de goldens (camino puro-Rust hasta el browser)', async ({
+/**
+ * shadcn Select renders as a button+listbox (not a native <select>).
+ * Click the trigger (aria-label="Output format"), then click the option.
+ */
+async function selectFormat(page: Page, fmt: string): Promise<void> {
+  await page.getByLabel('Output format').click();
+  await page.getByRole('option', { name: fmt }).click();
+}
+
+test('comprime un PNG con paridad de goldens (camino puro-Rust en el browser)', async ({
   page,
 }) => {
   await page.goto('/');
+  // PNG dropeado → el selector toma PNG, quality 75 / effort 4 (defaults) = el golden compress.
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles(join(ROOT, 'tests/vectors/gradient_circle.png'));
 
-  // Use auto format (default) = compress, q75 e4
-  const input = page.locator('input[type="file"]');
-  await input.setInputFiles(join(ROOT, 'tests/vectors/gradient_circle.png'));
-
-  // Wait for the Done badge to appear
-  await expect(page.locator('.badge--done').first()).toBeVisible({ timeout: 60_000 });
-
-  // Capture download bytes directly from blob URL
-  const downloadLink = page.locator('a.btn-download').first();
-  // resultUrl se crea en un $effect un tick DESPUÉS del badge done — esperar el link, no solo el badge.
-  await expect(downloadLink).toBeVisible();
-
-  const bytes = await captureDownloadBytes(page, downloadLink);
+  const bytes = await compressedBytes(page);
   expect(sha(bytes)).toBe(goldens['gradient_circle.compress.png.q75e4']);
+
+  // La UI muestra el ahorro y un botón de descarga.
+  await expect(page.locator('[data-testid="savings"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download' })).toBeVisible();
 });
 
-test('convierte PNG a AVIF en el browser', async ({ page }) => {
+test('convierte PNG a AVIF en el browser (paridad de goldens)', async ({ page }) => {
   await page.goto('/');
+  await selectFormat(page, 'AVIF'); // elegir formato antes del drop
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles(join(ROOT, 'tests/vectors/flat_colors.png'));
 
-  // Select AVIF format BEFORE uploading
-  await page.locator('#format-select').selectOption('avif');
-
-  const input = page.locator('input[type="file"]');
-  await input.setInputFiles(join(ROOT, 'tests/vectors/flat_colors.png'));
-
-  // AVIF encode is slow — wait up to 120s
-  await expect(page.locator('.badge--done').first()).toBeVisible({ timeout: 120_000 });
-
-  const downloadLink = page.locator('a.btn-download').first();
-  // resultUrl se crea en un $effect un tick DESPUÉS del badge done — esperar el link, no solo el badge.
-  await expect(downloadLink).toBeVisible();
-
-  const bytes = await captureDownloadBytes(page, downloadLink);
-  // AVIF parity wasm==native verified (smoke.mjs / T4) — hard assert:
+  const bytes = await compressedBytes(page);
+  // Paridad AVIF wasm==native verificada (T4) — assert duro.
   expect(sha(bytes)).toBe(goldens['flat_colors.convert.avif.q75e4']);
 });
 
-test('acepta AVIF input y convierte a JPEG (sanity magic bytes)', async ({ page }) => {
+test('acepta AVIF de entrada y convierte a JPEG (decode por el navegador)', async ({ page }) => {
   await page.goto('/');
+  await selectFormat(page, 'JPEG');
+  await page.locator('input[type="file"]').setInputFiles(join(here, 'fixtures/tiny.avif'));
 
-  // Select JPEG output format
-  await page.locator('#format-select').selectOption('jpeg');
-
-  const input = page.locator('input[type="file"]');
-  await input.setInputFiles(join(__dirname, 'fixtures/tiny.avif'));
-
-  // Wait for done
-  await expect(page.locator('.badge--done').first()).toBeVisible({ timeout: 60_000 });
-
-  const downloadLink = page.locator('a.btn-download').first();
-  // resultUrl se crea en un $effect un tick DESPUÉS del badge done — esperar el link, no solo el badge.
-  await expect(downloadLink).toBeVisible();
-
-  const bytes = await captureDownloadBytes(page, downloadLink);
-  // JPEG magic bytes: FFD8FF
+  const bytes = await compressedBytes(page);
+  // Magic bytes JPEG: FF D8 FF.
   expect(bytes[0]).toBe(0xff);
   expect(bytes[1]).toBe(0xd8);
   expect(bytes[2]).toBe(0xff);
+});
+
+test('el botón Download entrega un archivo con la extensión correcta', async ({ page }) => {
+  await page.goto('/');
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles(join(ROOT, 'tests/vectors/gradient_circle.png'));
+  await expect(page.locator('img[alt="Compressed"]')).toBeVisible({ timeout: 120_000 });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/gradient_circle\.png$/);
 });

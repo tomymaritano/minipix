@@ -1,13 +1,28 @@
 import { WorkerPool, WorkerJobError } from './worker/pool';
 import type { JobOptions, SuccessResponse } from './worker/protocol';
+import type { FormatId } from './format';
 
 export type { JobOptions };
+
+/** Formato de origen por MIME/extensión, para inicializar el selector. */
+function detectFormat(file: File): FormatId {
+  const t = file.type;
+  if (t === 'image/jpeg') return 'jpeg';
+  if (t === 'image/webp') return 'webp';
+  if (t === 'image/avif') return 'avif';
+  if (t === 'image/png') return 'png';
+  const ext = file.name.toLowerCase().split('.').pop();
+  if (ext === 'jpg' || ext === 'jpeg') return 'jpeg';
+  if (ext === 'webp') return 'webp';
+  if (ext === 'avif') return 'avif';
+  return 'png';
+}
 
 export type JobStatus = 'queued' | 'working' | 'done' | 'error';
 
 export interface Job {
   id: number;
-  /** Keep the File for previews; the ArrayBuffer sent to the worker is transferred (neutered). */
+  /** Se conserva el File para previews; el ArrayBuffer enviado al worker se transfiere (queda neutered). */
   file: File;
   status: JobStatus;
   phase?: 'decoding' | 'encoding';
@@ -15,19 +30,21 @@ export interface Job {
   result?: SuccessResponse;
   errorCode?: string;
   errorMessage?: string;
-  /** True when format=avif and file.size > 2MB — signals slow-encode warning. */
+  /** True cuando format=avif y file.size > 2MB — aviso de encode lento. */
   avifSlowWarning: boolean;
 }
 
-export const globalOptions = $state<JobOptions>({ quality: 75, effort: 4 });
+/** Opciones del toolbar. format undefined = mismo formato de origen (compress). */
+export const globalOptions = $state<JobOptions>({ quality: 75, lossless: false });
 
-// Single shared pool for the lifetime of the app.
 const pool = new WorkerPool();
-
 let nextId = 1;
 
 class PlaygroundState {
   jobs = $state<Job[]>([]);
+  activeId = $state<number | null>(null);
+
+  active = $derived.by(() => this.jobs.find((j) => j.id === this.activeId) ?? null);
 
   totals = $derived.by(() => {
     let bytesIn = 0;
@@ -45,43 +62,76 @@ class PlaygroundState {
   });
 
   addFiles(files: File[]): void {
-    // Snapshot globalOptions at enqueue time.
+    // En el primer drop, el selector toma el formato de origen (WebP wasm = lossless).
+    if (globalOptions.format === undefined && files[0]) {
+      const f = detectFormat(files[0]);
+      globalOptions.format = f;
+      if (f === 'webp') globalOptions.lossless = true;
+    }
     const opts: JobOptions = { ...globalOptions };
+    let firstNew: number | null = null;
 
     for (const file of files) {
       const id = nextId++;
+      if (firstNew === null) firstNew = id;
       const avifSlowWarning = opts.format === 'avif' && file.size > 2 * 1024 * 1024;
 
-      const job: Job = {
-        id,
-        file,
-        status: 'queued',
-        options: opts,
-        avifSlowWarning,
-      };
-
+      const job: Job = { id, file, status: 'queued', options: opts, avifSlowWarning };
       this.jobs.push(job);
-      // Re-leer del array $state: la referencia cruda NO es el proxy reactivo
-      // (mutar la cruda no dispara re-renders — bug encontrado por el E2E).
-      // Use find-by-id (no non-null assertion) to satisfy strictTypeChecked + noUncheckedIndexedAccess.
+      // Re-leer del array $state: la referencia cruda NO es el proxy reactivo.
       const proxied = this.jobs.find((j) => j.id === job.id);
       if (proxied) void this.#runJob(proxied);
     }
+
+    // El primer archivo nuevo pasa a ser la imagen activa.
+    if (firstNew !== null) this.activeId = firstNew;
   }
 
-  retry(job: Job, newOptions?: JobOptions): void {
-    const opts: JobOptions = newOptions ?? { ...globalOptions };
-    const avifSlowWarning = opts.format === 'avif' && job.file.size > 2 * 1024 * 1024;
-
+  /** Re-comprime un job con opciones nuevas (live editing del toolbar). */
+  retry(job: Job, newOptions: JobOptions): void {
+    const avifSlowWarning = newOptions.format === 'avif' && job.file.size > 2 * 1024 * 1024;
     job.status = 'queued';
     job.phase = undefined;
     job.result = undefined;
     job.errorCode = undefined;
     job.errorMessage = undefined;
-    job.options = opts;
+    job.options = { ...newOptions };
     job.avifSlowWarning = avifSlowWarning;
-
     void this.#runJob(job);
+  }
+
+  setActive(id: number): void {
+    this.activeId = id;
+  }
+
+  /** Índice 1-based de la activa y el total (para "2 / 5"). */
+  position = $derived.by(() => {
+    if (this.activeId === null) return null;
+    const idx = this.jobs.findIndex((j) => j.id === this.activeId);
+    return idx < 0 ? null : { index: idx + 1, total: this.jobs.length };
+  });
+
+  step(delta: number): void {
+    if (this.jobs.length === 0) return;
+    const idx = this.jobs.findIndex((j) => j.id === this.activeId);
+    const base = idx < 0 ? 0 : idx;
+    const next = (base + delta + this.jobs.length) % this.jobs.length;
+    const job = this.jobs[next];
+    if (job) this.activeId = job.id;
+  }
+
+  /** Quita la imagen activa; muestra la siguiente o vuelve al estado vacío. */
+  removeActive(): void {
+    const idx = this.jobs.findIndex((j) => j.id === this.activeId);
+    if (idx < 0) return;
+    this.jobs.splice(idx, 1);
+    const next = this.jobs[idx] ?? this.jobs[idx - 1] ?? null;
+    this.activeId = next ? next.id : null;
+  }
+
+  clear(): void {
+    this.jobs = [];
+    this.activeId = null;
   }
 
   async #runJob(job: Job): Promise<void> {
@@ -96,8 +146,7 @@ class PlaygroundState {
     }
 
     job.status = 'working';
-
-    const kind = job.options.format ? 'convert' : 'compress';
+    const kind = job.options.format || job.options.resize !== undefined ? 'convert' : 'compress';
 
     try {
       const result = await pool.run(
@@ -106,8 +155,6 @@ class PlaygroundState {
           kind,
           data: buffer,
           fileName: job.file.name,
-          // Spread to get a plain (non-proxied) object — Svelte 5's reactive proxy
-          // cannot be structured-cloned for postMessage transfer.
           options: { ...job.options },
         },
         (phase) => {

@@ -46,17 +46,56 @@ function isAvif(bytes: Uint8Array): boolean {
   );
 }
 
+/**
+ * Decodifica cualquier formato vía el navegador a RGBA8. Si `maxDim` se setea,
+ * reescala (lado más largo = maxDim) hacia ABAJO (nunca agranda) con suavizado.
+ */
+/** Detecta el formato de origen por magic bytes (fallback del path de resize). */
+function sniffFormat(bytes: Uint8Array): 'png' | 'jpeg' | 'webp' | 'avif' {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'jpeg';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return 'webp';
+  }
+  if (isAvif(bytes)) return 'avif';
+  return 'png';
+}
+
 async function browserDecodeToRgba(
   data: ArrayBuffer,
+  maxDim?: number,
 ): Promise<{ rgba: Uint8Array; width: number; height: number }> {
   const bitmap = await createImageBitmap(new Blob([data]));
-  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  let w = bitmap.width;
+  let h = bitmap.height;
+  if (maxDim !== undefined && maxDim > 0) {
+    const longest = Math.max(w, h);
+    if (longest > maxDim) {
+      const scale = maxDim / longest;
+      w = Math.max(1, Math.round(w * scale));
+      h = Math.max(1, Math.round(h * scale));
+    }
+  }
+  const canvas = new OffscreenCanvas(w, h);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('[DecodeError] OffscreenCanvas 2d context unavailable');
-  ctx.drawImage(bitmap, 0, 0);
-  const img = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  const img = ctx.getImageData(0, 0, w, h);
   bitmap.close();
-  return { rgba: new Uint8Array(img.data.buffer), width: img.width, height: img.height };
+  return { rgba: new Uint8Array(img.data.buffer), width: w, height: h };
 }
 
 self.onmessage = (ev: MessageEvent<CompressRequest>) => {
@@ -78,12 +117,17 @@ async function handle(req: CompressRequest): Promise<void> {
 
     let out;
 
-    if (isAvif(bytes)) {
-      // AVIF: browser decodes (wasm core has no AV1 decoder — M2 plan).
+    // El navegador decodifica cuando: (a) es AVIF (el core wasm no trae decoder
+    // AV1), o (b) se pidió resize (necesitamos los píxeles para reescalar).
+    const needsBrowserDecode = isAvif(bytes) || req.options.resize !== undefined;
+
+    if (needsBrowserDecode) {
       post({ id: req.id, progress: 'decoding' });
-      const { rgba, width, height } = await browserDecodeToRgba(req.data);
+      const { rgba, width, height } = await browserDecodeToRgba(req.data, req.options.resize);
       post({ id: req.id, progress: 'encoding' });
-      const target = req.options.format ?? 'avif';
+      // Sin format explícito (compress = mismo formato): codificar al formato de
+      // origen detectado, no a uno fijo.
+      const target = req.options.format ?? sniffFormat(bytes);
       out = encodeRgba(rgba, width, height, target, req.options);
     } else {
       post({ id: req.id, progress: 'encoding' });

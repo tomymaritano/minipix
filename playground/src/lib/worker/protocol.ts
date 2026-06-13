@@ -5,6 +5,8 @@ export interface JobOptions {
   quality?: number;
   effort?: number;
   lossless?: boolean;
+  /** Si se setea, la imagen se reescala (lado más largo = N px) antes de codificar. */
+  resize?: number;
 }
 
 export interface CompressRequest {
