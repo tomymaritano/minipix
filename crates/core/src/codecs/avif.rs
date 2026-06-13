@@ -87,11 +87,19 @@ impl ImageDecoder for AvifCodec {
         // SIN decodificar el frame. max_frame_* es el máximo de secuencia (cota
         // superior conservadora del tamaño croppeado) — la dirección segura para un guard.
         //
-        // BUG CONOCIDO avif-parse 1.4.0: `read_avif` llama a `assert!` en lugar de
-        // retornar `Err` en ciertos estados de parser malformado (p.ej. "bad parser
-        // state bytes left"). `catch_unwind` convierte ese pánico en un error tipado
-        // para que NUNCA escape a través de la API pública. Backlog: cuando avif-parse
-        // upstream corrija los assert→error, eliminar este wrap.
+        // BUG CONOCIDO avif-parse 1.4.0: `read_avif` puede paniquear (assert!/
+        // debug_assert!) sobre AVIF malformado — p.ej. debug_assert_eq! en lib.rs:1329
+        // ("bad parser state bytes left", se activa en debug/test/fuzz) y assert! en
+        // lib.rs:668 (offset <= size, alcanzable también en release con boxes cuyo
+        // declared size supera el espacio disponible). `catch_unwind` convierte ese
+        // pánico en un error tipado para que NUNCA escape a través de la API pública.
+        // Backlog: cuando avif-parse upstream corrija los assert→error, eliminar este wrap.
+        //
+        // avif-parse 1.4 puede paniquear (assert!/debug_assert!) sobre AVIF malformado.
+        // Se contiene con catch_unwind → Error::Decode tipado. NO se suprime el panic
+        // hook: set_hook es global y minipix decodifica AVIFs en paralelo (threadpools
+        // de los bindings / worker pool) — suprimir concurrentemente corrompería el hook.
+        // El ruido en stderr aparece sólo en el camino de error con input malformado.
         let data_owned = data.to_vec();
         let parse_result = std::panic::catch_unwind(move || {
             let mut cursor = std::io::Cursor::new(data_owned);

@@ -17,11 +17,10 @@ use libfuzzer_sys::fuzz_target;
 fuzz_target!(|data: &[u8]| {
     // max_pixels pequeño: evita tiempos de decode largos en inputs que logran
     // pasar el guard de sniff/peek con dimensiones razonables.
-    let opts = minipix_core::Options {
-        max_pixels: 65536, // 256×256 máximo
-        quality: 75,
-        effort: 1, // mínimo esfuerzo → máxima velocidad del encode
-        ..minipix_core::Options::default()
-    };
+    // Options es #[non_exhaustive] → no se puede usar struct literal con ..default();
+    // se usa Default + campo directo + builder, igual que robustness.rs.
+    let mut opts = minipix_core::Options::default();
+    opts.max_pixels = 65_536; // 256×256 máximo
+    let opts = opts.with_quality(75).with_effort(1); // mínimo esfuerzo → máxima velocidad del encode
     let _ = minipix_core::compress(data, &opts);
 });

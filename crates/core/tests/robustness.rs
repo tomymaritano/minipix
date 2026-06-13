@@ -130,6 +130,54 @@ fn mutate(rng: &mut Rng, buf: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Mutaciones dirigidas a los campos de tamaño de boxes ISO-BMFF (AVIF/MP4).
+/// Estas son las mutaciones que más fiablemente ejercen los assert! de avif-parse:
+///   - Sobreescribir bytes 0..4 (size del primer box) con un valor enorme.
+///   - Truncar el buffer a mitad de un box (triggering "bytes left" asserts).
+///   - Corromper un size field en un offset profundo del container.
+fn mutate_avif_box_sizes(rng: &mut Rng, buf: &[u8]) -> Vec<u8> {
+    let mut out = buf.to_vec();
+    if out.len() < 4 {
+        return out;
+    }
+    match rng.range(3) {
+        0 => {
+            // Sobreescribir el size del primer box (bytes 0..4) con valor enorme (big-endian).
+            // avif-parse 1.4 hace assert!(offset <= size) — un size declarado > datos disponibles
+            // dispara ese assert en builds release, y debug_assert_eq! en debug/fuzz.
+            out[0] = 0xFF;
+            out[1] = 0xFF;
+            out[2] = 0xFF;
+            out[3] = rng.byte() | 0xF0; // siempre un valor muy grande
+        }
+        1 => {
+            // Truncar a un offset mid-box aleatorio (8..len/2): deja el size field
+            // intacto pero los datos son insuficientes → el parser ve "bytes left".
+            let min_len = out.len().min(8);
+            let max_len = (out.len() / 2).max(min_len);
+            let trunc = min_len + rng.range((max_len - min_len).max(1));
+            out.truncate(trunc);
+        }
+        _ => {
+            // Corromper un size field en un offset múltiplo de 4 más profundo.
+            // Los boxes BMFF están anidados; corromper un size interior es un vector
+            // clásico de parser crashes.
+            let len = out.len();
+            if len >= 8 {
+                // Elegir un offset alineado a 4 bytes después del ftyp inicial (≥8).
+                let candidates = (len - 4) / 4;
+                let idx = (1 + rng.range(candidates.max(1))) * 4;
+                let idx = idx.min(len - 4);
+                out[idx] = 0xFF;
+                out[idx + 1] = 0xFF;
+                out[idx + 2] = 0xFF;
+                out[idx + 3] = 0xFF;
+            }
+        }
+    }
+    out
+}
+
 // ── Test 1: sniff nunca panica ────────────────────────────────────────────────
 
 #[test]
@@ -214,7 +262,6 @@ fn compress_sobre_vectores_mutados_nunca_panica() {
 
     // ── Semilla AVIF ───────────────────────────────────────────────────────────
     // AVIF: encode es lento (rav1e); usamos 4×4 con effort 1 para seed pequeño.
-    // Mutaciones reducidas a 50 para mantener el test en tiempo razonable.
     // Si el codec no está disponible (wasm), se usa basura reconocible como AVIF.
     let avif_seed = seed_for_format(&tiny_png(4, 4), Format::Avif).unwrap_or_else(|| {
         // Construir un header ftyp/avif mínimo para que sniff lo reconozca.
@@ -223,7 +270,16 @@ fn compress_sobre_vectores_mutados_nunca_panica() {
         h.extend([0u8; 20]);
         h
     });
+    // 50 mutaciones aleatorias (baseline) + 200 mutaciones dirigidas a box sizes ISO-BMFF.
+    // Las mutaciones de box size son las que más fiablemente ejercen el catch_unwind
+    // (avif-parse assert! sobre size fields). Sin estas mutaciones dirigidas la cobertura
+    // del camino de pánico es ~0 con flips aleatorios.
     run_mutations(&avif_seed, 50, &mut rng);
+    let opts = bounded_opts();
+    for _ in 0..200 {
+        let mutated = mutate_avif_box_sizes(&mut rng, &avif_seed);
+        let _ = compress(&mutated, &opts);
+    }
 }
 
 // ── Test 4: convert sobre basura retorna Result ───────────────────────────────
@@ -246,7 +302,57 @@ fn convert_sobre_basura_nunca_panica() {
     }
 }
 
-// ── Test 5: options extremas + basura no paniquan ─────────────────────────────
+// ── Test 5 (regresión): AVIF con box size corrupto devuelve Err, no pánico ────
+//
+// Verifica que catch_unwind en avif.rs convierte el pánico de avif-parse en un
+// Error::Decode tipado. El test completando sin abortar ya prueba no-panic;
+// el assert! comprueba que también retorna Err (no Ok con datos inválidos).
+
+#[test]
+fn avif_con_box_size_corrupto_devuelve_error_no_panica() {
+    // Construimos un AVIF válido (4×4, effort 1) y corrompemos el size del primer box.
+    let png = std::fs::read(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/vectors/gradient_circle.png"),
+    )
+    .unwrap_or_else(|_| tiny_png(16, 16));
+
+    // Intentar encode AVIF; si no está disponible (wasm/sin codec), usar header mínimo.
+    let avif = {
+        let opts = Options::default().with_format(Format::Avif).with_effort(1);
+        convert(&png, &opts).map_or_else(
+            |_| {
+                // Codec no disponible en esta plataforma: construir header ftyp mínimo
+                // que sniff reconoce como AVIF para ejercitar el mismo camino de decode.
+                let mut h = vec![0x00u8, 0x00, 0x00, 0x1C];
+                h.extend(b"ftypavif");
+                h.extend([0u8; 64]);
+                h
+            },
+            |out| out.data,
+        )
+    };
+
+    // Corromper el size del primer box ISO-BMFF (bytes 0..4) con un valor enorme
+    // (big-endian 0xFFFFFFF0 >> tamaño real del buffer → avif-parse hace assert!).
+    let mut bad = avif.clone();
+    if bad.len() >= 4 {
+        bad[0] = 0xFF;
+        bad[1] = 0xFF;
+        bad[2] = 0xFF;
+        bad[3] = 0xF0;
+    }
+
+    let res = compress(&bad, &Options::default());
+    // DEBE ser Err (no panic). El test completando sin abortar prueba no-panic;
+    // el assert! adicional verifica que el contrato "malformed AVIF → Err" se cumple.
+    assert!(
+        res.is_err(),
+        "AVIF con box size corrupto debe retornar Err, no Ok ni panic"
+    );
+}
+
+// ── Test 7: options extremas + basura no paniquan ─────────────────────────────
 
 #[test]
 fn options_extremas_con_basura_nunca_paniquan() {
