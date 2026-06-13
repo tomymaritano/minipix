@@ -46,12 +46,6 @@ pub(crate) fn apply_profile_to_srgb(rgba: &mut [u8], profile: &ColorProfile) -> 
     Ok(())
 }
 
-/// 16 grises uniformemente espaciados para la rampa TRC (0..=255, paso ~17).
-/// Precalculados como literal para evitar cast u16→u8 bajo `-D warnings`.
-const GRAY_RAMP_STEPS: [u8; 16] = [
-    0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255,
-];
-
 /// Devuelve `true` sólo si el transform es byte-exactamente identidad en todo el dominio,
 /// verificado mediante tres comprobaciones estructurales encadenadas:
 ///
@@ -64,7 +58,7 @@ const GRAY_RAMP_STEPS: [u8; 16] = [
 ///    RGB→XYZ→RGB incluyendo adaptación cromática) tiene todos sus elementos diagonales
 ///    dentro de 1e-4 de 1.0 y todos los fuera-de-diagonal dentro de 1e-4 de 0.0.
 ///
-/// 3. **Rampa de grises byte-exacta**: 16 grises uniformes transformados vuelven sin
+/// 3. **Rampa de grises byte-exacta**: todos los 256 grises (0..=255) transformados vuelven sin
 ///    cambios (diferencia = 0 en todos los canales RGB). Esto detecta desviaciones de TRC
 ///    que la comprobación de matriz no cubre (e.g., gamma ligeramente diferente).
 ///
@@ -106,10 +100,12 @@ fn transform_is_identity(
         return false;
     }
 
-    // 3. Rampa de grises byte-exacta: cubre desviaciones de TRC que la matriz no detecta.
-    let mut ramp: Vec<u8> = Vec::with_capacity(GRAY_RAMP_STEPS.len() * 4);
-    for v in GRAY_RAMP_STEPS {
-        ramp.extend_from_slice(&[v, v, v, 255]);
+    // 3. Rampa de grises completa (0..=255): con la matriz ya probada identidad,
+    //    exactitud byte a byte en los 256 grises prueba que las 3 TRC por canal son
+    //    identidad en todo el dominio (sin gap de muestreo). Una sola llamada al transform.
+    let mut ramp: Vec<u8> = Vec::with_capacity(256 * 4);
+    for v in 0u8..=255 {
+        ramp.extend([v, v, v, 255]);
     }
     let mut out = vec![0u8; ramp.len()];
     if transform.transform(&ramp, &mut out).is_err() {
