@@ -153,6 +153,19 @@ For design rationale see [`docs/superpowers/specs/2026-06-11-minipix-design.md`]
 
 A 100% client-side WebAssembly playground is coming in milestone M2. No server required — compress and convert images entirely in the browser.
 
+### Playground deploy
+
+The playground is deployed automatically to **Cloudflare Pages** (`minipix` project) on every push to `master` that touches `playground/`, `crates/wasm/`, `crates/core/`, or the deploy workflow itself.
+
+**One-time setup (repo owner):**
+
+1. Cloudflare Dashboard → Workers & Pages → Create → Pages → create a project named **`minipix`** (connect manually — do not link the git repo).
+2. Add two repository secrets in GitHub → Settings → Secrets → Actions:
+   - `CLOUDFLARE_API_TOKEN` — a Cloudflare API token with **Cloudflare Pages: Edit** permission.
+   - `CLOUDFLARE_ACCOUNT_ID` — your Cloudflare account ID (found in the dashboard sidebar).
+
+After the secrets are set, the next push to `master` touching the relevant paths triggers a full wasm build + Svelte build + Cloudflare Pages deploy via `wrangler-action@v4`.
+
 ---
 
 ## License
