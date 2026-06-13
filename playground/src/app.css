@@ -7,64 +7,79 @@
   --font-sans: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', 'Menlo', monospace;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', 'Menlo', monospace;
 
-  /* Dark-only palette — zinc/slate base, emerald accent */
-  --color-background: #0c0d10;
-  --color-foreground: #e9e9ec;
+  /* ── Surface elevation system ────────────────────────────────
+     base (body) → panel → card → raised. Each step ~one shade up. */
+  --color-background: #0b0c0e;
+  --color-foreground: #ecedef;
 
-  --color-card: #101216;
-  --color-card-foreground: #e9e9ec;
+  --color-card: #14161a;
+  --color-card-foreground: #ecedef;
 
-  --color-primary: #4ade80;
-  --color-primary-foreground: #0c0d10;
+  --color-primary: #34d399;
+  --color-primary-foreground: #06120d;
 
-  --color-secondary: #1c1f26;
-  --color-secondary-foreground: #e9e9ec;
+  --color-secondary: #181b20;
+  --color-secondary-foreground: #ecedef;
 
-  --color-muted: #1c1f26;
-  --color-muted-foreground: #777b84;
+  --color-muted: #181b20;
+  --color-muted-foreground: #7c818b;
 
-  --color-accent: #4ade80;
-  --color-accent-foreground: #0c0d10;
+  --color-accent: #34d399;
+  --color-accent-foreground: #06120d;
 
   --color-destructive: #f2685a;
-  --color-destructive-foreground: #e9e9ec;
+  --color-destructive-foreground: #ecedef;
 
-  --color-border: rgba(255, 255, 255, 0.07);
-  --color-input: rgba(255, 255, 255, 0.07);
-  --color-ring: #4ade80;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-input: rgba(255, 255, 255, 0.08);
+  --color-ring: #34d399;
 
-  /* slightly tighter radius — polished but not rounded */
-  --radius: 0.375rem;
+  --radius: 0.5rem;
 }
 
-/* Legacy tokens used in Compare.svelte + inline transitions */
+/* Design tokens — referenced by app components and shadcn wrappers. */
 :root {
-  --bg: #0c0d10;
-  --bg-elev: #101216;
-  --bg-panel: #0d0f12;
-  --fg: #e9e9ec;
-  --fg-dim: #777b84;
-  --fg-faint: #45484f;
-  --fg-ghost: #2a2c31;
-  --line: rgba(255, 255, 255, 0.07);
-  --line-strong: rgba(255, 255, 255, 0.14);
-  --dash: rgba(255, 255, 255, 0.09);
-  --mint: #4ade80;
-  --mint-dim: rgba(74, 222, 128, 0.16);
-  --warn: #f2c14e;
-  --bad: #f2685a;
-  --ink-btn: #f4f4f5;
-  --ink-btn-fg: #0c0d10;
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --bar-h: 52px;
-}
+  /* surfaces */
+  --bg: #0b0c0e;
+  --bg-1: #101216; /* panel */
+  --bg-2: #14161a; /* card / elevated */
+  --bg-3: #1a1d22; /* raised control */
+  --bg-elev: #14161a;
+  --bg-panel: #101216;
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+  /* text hierarchy */
+  --fg: #ecedef;
+  --fg-dim: #9498a1;
+  --fg-faint: #6b6f78;
+  --fg-ghost: #34373d;
+
+  /* lines */
+  --line: rgba(255, 255, 255, 0.08);
+  --line-soft: rgba(255, 255, 255, 0.05);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --dash: rgba(255, 255, 255, 0.1);
+
+  /* signal */
+  --mint: #34d399;
+  --mint-bright: #4ade80;
+  --mint-dim: rgba(52, 211, 153, 0.16);
+  --mint-glow: rgba(52, 211, 153, 0.4);
+  --warn: #f5b544;
+  --warn-dim: rgba(245, 181, 68, 0.16);
+  --bad: #f2685a;
+
+  /* buttons (neutral ink) */
+  --ink-btn: #f2f3f5;
+  --ink-btn-fg: #0b0c0e;
+
+  /* elevation shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px -2px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 40px -8px rgba(0, 0, 0, 0.6);
+  --shadow-panel: 0 -1px 0 rgba(255, 255, 255, 0.04), 0 -12px 40px -12px rgba(0, 0, 0, 0.7);
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --bar-h: 60px;
 }
 
 html,
@@ -82,11 +97,6 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;
-  background-image: radial-gradient(
-    120% 80% at 50% -10%,
-    rgba(255, 255, 255, 0.025),
-    transparent 60%
-  );
 }
 
 img,
@@ -101,27 +111,30 @@ svg {
   height: 100vh;
   height: 100dvh;
   position: relative;
+  isolation: isolate;
 }
 
-/* dashed inset frame — signature motif */
+/* Ambient radial depth — a soft cool glow from above, grounding the canvas. */
 #app::before {
   content: '';
   position: fixed;
-  inset: 9px;
-  border: 1px dashed var(--dash);
-  border-radius: 2px;
+  inset: 0;
+  z-index: 0;
   pointer-events: none;
-  z-index: 50;
+  background:
+    radial-gradient(90% 60% at 50% -8%, rgba(52, 211, 153, 0.05), transparent 55%),
+    radial-gradient(120% 90% at 50% -20%, rgba(255, 255, 255, 0.035), transparent 60%),
+    radial-gradient(100% 100% at 50% 120%, rgba(0, 0, 0, 0.5), transparent 50%);
 }
 
-/* film grain — subtle atmosphere */
+/* Faint film grain — atmosphere, cheap. */
 #app::after {
   content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 60;
-  opacity: 0.035;
+  z-index: 1;
+  opacity: 0.03;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
@@ -145,18 +158,33 @@ select {
   color: var(--fg);
 }
 
-/* kbd atom — used in EmptyState */
+/* ── kbd atom ─────────────────────────────────────────────── */
 .kbd {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 2px;
+  min-width: 18px;
   padding: 2px 6px;
   font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
   color: var(--fg-dim);
-  background: var(--bg-elev);
+  background: var(--bg-3);
   border: 1px solid var(--line);
-  border-radius: 4px;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  border-radius: 5px;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* type utilities */
+.label-xs {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
 }
 
 *::-webkit-scrollbar {

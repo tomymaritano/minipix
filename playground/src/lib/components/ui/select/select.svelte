@@ -31,7 +31,7 @@
   <SelectPrimitive.Trigger
     aria-label={ariaLabel}
     class={cn(
-      'inline-flex items-center gap-[6px] rounded-[6px] border border-[var(--line)] px-[9px] py-[4px] text-[12px] font-medium text-[var(--fg)] transition-colors duration-150 hover:border-[var(--line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mint)] cursor-pointer',
+      'select-trigger inline-flex h-[30px] items-center gap-[7px] rounded-[7px] border border-[var(--line)] bg-[var(--bg-3)] px-[11px] text-[12px] font-medium text-[var(--fg)] transition-colors duration-150 hover:border-[var(--line-strong)] data-[state=open]:border-[var(--mint)] data-[state=open]:ring-2 data-[state=open]:ring-[var(--mint-dim)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mint)] cursor-pointer',
       className,
     )}
   >
@@ -43,30 +43,74 @@
       height="6"
       viewBox="0 0 9 6"
       aria-hidden="true"
-      class="text-[var(--fg-dim)] shrink-0"
+      class="select-chevron text-[var(--fg-faint)] shrink-0 transition-transform duration-150"
     >
-      <path d="M1 1l3.5 3.5L8 1" stroke="currentColor" stroke-width="1.2" fill="none" />
+      <path
+        d="M1 1l3.5 3.5L8 1"
+        stroke="currentColor"
+        stroke-width="1.4"
+        fill="none"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
     </svg>
   </SelectPrimitive.Trigger>
 
-  <SelectPrimitive.Content
-    class="z-50 min-w-[80px] overflow-hidden rounded-[6px] border border-[var(--line)] bg-[var(--bg-elev)] py-1 shadow-xl"
-    sideOffset={6}
-  >
-    <SelectPrimitive.Viewport>
-      {#each items as item (item.value)}
-        <SelectPrimitive.Item
-          value={item.value}
-          label={item.label}
-          class={cn(
-            'relative flex cursor-pointer select-none items-center px-[10px] py-[5px] text-[12px] text-[var(--fg)] transition-colors duration-100 outline-none',
-            'data-[highlighted]:bg-[var(--mint)] data-[highlighted]:text-[var(--bg)]',
-            'data-[selected]:text-[var(--mint)]',
-          )}
-        >
-          {item.label}
-        </SelectPrimitive.Item>
-      {/each}
-    </SelectPrimitive.Viewport>
-  </SelectPrimitive.Content>
+  <SelectPrimitive.Portal>
+    <SelectPrimitive.Content
+      class="z-[80] min-w-[var(--bits-select-anchor-width,96px)] overflow-hidden rounded-[8px] border border-[var(--line)] bg-[var(--bg-3)] p-1 shadow-[var(--shadow-lg)] select-content"
+      sideOffset={8}
+    >
+      <SelectPrimitive.Viewport>
+        {#each items as item (item.value)}
+          <SelectPrimitive.Item
+            value={item.value}
+            label={item.label}
+            class={cn(
+              'relative flex cursor-pointer select-none items-center justify-between gap-3 rounded-[5px] px-[10px] py-[6px] text-[12px] font-medium text-[var(--fg-dim)] transition-colors duration-100 outline-none',
+              'data-[highlighted]:bg-white/[0.06] data-[highlighted]:text-[var(--fg)]',
+              'data-[selected]:text-[var(--mint)]',
+            )}
+          >
+            {#snippet children({ selected })}
+              {item.label}
+              {#if selected}
+                <svg width="11" height="9" viewBox="0 0 11 9" aria-hidden="true" class="shrink-0">
+                  <path
+                    d="M1 4.5 4 7.5 10 1"
+                    stroke="currentColor"
+                    stroke-width="1.4"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              {/if}
+            {/snippet}
+          </SelectPrimitive.Item>
+        {/each}
+      </SelectPrimitive.Viewport>
+    </SelectPrimitive.Content>
+  </SelectPrimitive.Portal>
 </SelectPrimitive.Root>
+
+<style>
+  :global(.select-trigger[data-state='open'] .select-chevron) {
+    transform: rotate(180deg);
+    color: var(--mint);
+  }
+  :global(.select-content) {
+    animation: select-in 0.14s var(--ease);
+    transform-origin: top center;
+  }
+  @keyframes select-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+</style>

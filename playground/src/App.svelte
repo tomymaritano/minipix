@@ -98,10 +98,16 @@
 
 <!-- Brand mark -->
 <header
-  class="absolute top-[22px] left-[26px] z-30 inline-flex items-center gap-2 text-[13px] tracking-tight select-none"
+  class="absolute top-[20px] left-[24px] z-30 inline-flex select-none items-center gap-[8px] text-[13px] tracking-tight"
 >
-  <span class="text-[10px] text-[var(--mint)]">◆</span>
-  <span class="text-[var(--fg)] font-medium">minipix</span>
+  <span
+    class="grid h-[20px] w-[20px] place-items-center rounded-[6px] border border-[rgba(52,211,153,0.3)] bg-[rgba(52,211,153,0.1)] text-[9px] text-[var(--mint)] shadow-[0_0_12px_-4px_var(--mint-glow)]"
+    >◆</span
+  >
+  <span class="font-medium text-[var(--fg)]">minipix</span>
+  <span class="hidden text-[10px] tracking-[0.04em] text-[var(--fg-faint)] sm:inline"
+    >/ playground</span
+  >
 </header>
 
 {#if playground.active}
@@ -114,10 +120,33 @@
 
 {#if dragOver}
   <div
-    class="fixed inset-[9px] z-[70] grid place-items-center bg-black/70 backdrop-blur-sm border border-dashed border-[var(--mint)] rounded-sm animate-[pop_0.15s_ease]"
-    style="animation: pop 0.15s var(--ease);"
+    class="drop-overlay fixed inset-[10px] z-[70] grid place-items-center rounded-[14px] border-2 border-dashed border-[var(--mint)] backdrop-blur-md"
+    style="background: radial-gradient(60% 50% at 50% 50%, rgba(52,211,153,0.12), rgba(0,0,0,0.66) 75%);"
   >
-    <span class="text-[15px] text-[var(--mint)] tracking-wide">Drop to compress</span>
+    <div class="flex flex-col items-center gap-[14px]">
+      <div
+        class="grid h-[60px] w-[60px] place-items-center rounded-[18px] border border-[rgba(52,211,153,0.4)] bg-[rgba(52,211,153,0.12)] shadow-[0_0_40px_-8px_var(--mint-glow)]"
+      >
+        <svg
+          width="28"
+          height="28"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--mint)"
+          stroke-width="1.4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+      </div>
+      <span class="text-[16px] font-medium tracking-[0.01em] text-[var(--mint)]"
+        >Drop to compress</span
+      >
+    </div>
   </div>
 {/if}
 
@@ -125,9 +154,14 @@
   @keyframes pop {
     from {
       opacity: 0;
+      transform: scale(0.99);
     }
     to {
       opacity: 1;
+      transform: scale(1);
     }
+  }
+  .drop-overlay {
+    animation: pop 0.15s var(--ease);
   }
 </style>

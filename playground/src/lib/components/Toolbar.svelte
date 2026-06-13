@@ -7,6 +7,7 @@
   import { Slider } from '$lib/components/ui/slider';
   import { Switch } from '$lib/components/ui/switch';
   import { Badge } from '$lib/components/ui/badge';
+  import { Separator } from '$lib/components/ui/separator';
 
   interface Props {
     active: Job | null;
@@ -69,100 +70,141 @@
 </script>
 
 <div
-  class="fixed left-0 right-0 bottom-0 z-40 flex items-center justify-between gap-4 px-5 border-t border-[var(--line)]"
-  style="height: var(--bar-h); background: linear-gradient(to top, var(--bg) 70%, rgba(12,13,16,0.85)); backdrop-filter: blur(8px);"
+  class="toolbar fixed inset-x-0 bottom-0 z-40 border-t border-[var(--line)]"
+  style="background: linear-gradient(to top, var(--bg-1) 60%, rgba(16,18,22,0.78)); backdrop-filter: blur(14px) saturate(1.2); box-shadow: var(--shadow-panel);"
 >
-  <!-- Left group -->
-  <div class="flex items-center gap-[14px] min-w-0">
-    <!-- Format select -->
-    <div class="flex items-center gap-[9px]">
-      <span class="text-[12px] text-[var(--fg-faint)] tracking-[0.04em]">Format</span>
-      <Select
-        value={globalOptions.format ?? 'png'}
-        items={formatItems}
-        onValueChange={pickFormat}
-        aria-label="Output format"
-      />
-    </div>
-
-    <span class="w-px h-[16px] bg-[var(--line)]"></span>
-
-    <!-- Quality slider -->
-    <div
-      class="flex items-center gap-[9px] transition-opacity duration-200"
-      style:opacity={qualityActive ? '1' : '0.32'}
-    >
-      <span class="text-[12px] text-[var(--fg-faint)] tracking-[0.04em]">Smaller</span>
-      <Slider
-        value={globalOptions.quality ?? 75}
-        min={1}
-        max={100}
-        disabled={!qualityActive}
-        onValueChange={(v: number) => {
-          globalOptions.quality = v;
-          recompress(180);
-        }}
-      />
-      <span class="text-[12px] text-[var(--fg-faint)] tracking-[0.04em]">Sharper</span>
-    </div>
-
-    <span class="w-px h-[16px] bg-[var(--line)]"></span>
-
-    <!-- Lossless switch -->
-    <Switch
-      checked={isLossless}
-      disabled={!losslessAllowed}
-      label="Lossless"
-      onCheckedChange={toggleLossless}
-    />
-
-    <!-- Resize switch + px input (only when active image) -->
-    {#if active}
-      <Switch checked={resizeOn} label="Resize" onCheckedChange={toggleResize} />
-      {#if resizeOn}
-        <input
-          class="w-[56px] bg-transparent border border-[var(--line)] rounded-[5px] px-[6px] py-[3px] text-[12px] text-[var(--fg)]"
-          type="number"
-          min="16"
-          max="8192"
-          value={globalOptions.resize ?? 1024}
-          oninput={(e) => setResizeDim(Number(e.currentTarget.value))}
-          aria-label="Max dimension in pixels"
+  <div
+    class="mx-auto flex w-full max-w-[1520px] flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-3 lg:px-7"
+    style="min-height: var(--bar-h);"
+  >
+    <!-- Left group: controls (stays one line; wraps the right group below when cramped) -->
+    <div class="flex flex-nowrap items-center gap-x-[13px]">
+      <!-- Format select -->
+      <div class="flex items-center gap-[10px]">
+        <span class="label-xs">Format</span>
+        <Select
+          value={globalOptions.format ?? 'png'}
+          items={formatItems}
+          onValueChange={pickFormat}
+          aria-label="Output format"
         />
-        <span class="text-[12px] text-[var(--fg-faint)] tracking-[0.04em]">px</span>
-      {/if}
-    {/if}
-  </div>
+      </div>
 
-  <!-- Right group -->
-  <div class="flex items-center gap-[10px] shrink-0">
-    {#if active}
-      {#if active.status === 'working'}
-        <span class="inline-flex items-center gap-2 text-[12px] text-[var(--fg-dim)]">
-          <span
-            class="w-[11px] h-[11px] border-[1.5px] border-[var(--fg-ghost)] border-t-[var(--mint)] rounded-full animate-spin"
-          ></span>
-          {active.phase === 'decoding' ? 'decoding…' : 'compressing…'}
-        </span>
-      {:else if active.status === 'error'}
-        <span class="text-[12px] text-[var(--bad)]">{active.errorCode ?? 'error'}</span>
-      {:else if active.status === 'done' && active.result}
-        {@const r = active.result}
-        <span class="inline-flex items-center gap-2 text-[12px] tabular-nums">
-          <span class="text-[var(--fg-faint)] tracking-[0.04em]">Original</span>
-          <span class="text-[var(--fg)] font-medium">{fmtBytes(r.bytesIn)}</span>
-          <span class="text-[var(--fg-faint)]">→</span>
-          <span class="text-[var(--fg)] font-medium">{fmtBytes(r.bytesOut)}</span>
-          <Badge
-            variant={r.ratio > 1 ? 'warning' : 'default'}
-            class="savings"
-            data-testid="savings"
+      <Separator orientation="vertical" class="h-[22px]" />
+
+      <!-- Quality slider -->
+      <div
+        class="flex items-center gap-[11px] transition-opacity duration-200"
+        style:opacity={qualityActive ? '1' : '0.4'}
+      >
+        <span class="label-xs">Smaller</span>
+        <Slider
+          value={globalOptions.quality ?? 75}
+          min={1}
+          max={100}
+          disabled={!qualityActive}
+          onValueChange={(v: number) => {
+            globalOptions.quality = v;
+            recompress(180);
+          }}
+        />
+        <span class="label-xs">Sharper</span>
+        {#if qualityActive}
+          <span class="w-[26px] text-[11px] font-medium tabular-nums text-[var(--fg-dim)]"
+            >{globalOptions.quality ?? 75}</span
           >
-            {fmtSavings(r.ratio)}
-          </Badge>
-        </span>
-        <Button onclick={download}>Download</Button>
+        {/if}
+      </div>
+
+      <Separator orientation="vertical" class="h-[22px]" />
+
+      <!-- Lossless switch -->
+      <Switch
+        checked={isLossless}
+        disabled={!losslessAllowed}
+        label="Lossless"
+        onCheckedChange={toggleLossless}
+      />
+
+      <!-- Resize switch + px input (only when active image) -->
+      {#if active}
+        <Separator orientation="vertical" class="h-[22px]" />
+        <div class="flex items-center gap-[10px]">
+          <Switch checked={resizeOn} label="Resize" onCheckedChange={toggleResize} />
+          {#if resizeOn}
+            <div
+              class="inline-flex items-center gap-[5px] rounded-[7px] border border-[var(--line)] bg-[var(--bg-3)] pr-[8px] focus-within:border-[var(--mint)] focus-within:ring-2 focus-within:ring-[var(--mint-dim)]"
+            >
+              <input
+                class="w-[52px] bg-transparent px-[8px] py-[5px] text-[12px] tabular-nums text-[var(--fg)] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                type="number"
+                min="16"
+                max="8192"
+                value={globalOptions.resize ?? 1024}
+                oninput={(e) => setResizeDim(Number(e.currentTarget.value))}
+                aria-label="Max dimension in pixels"
+              />
+              <span class="label-xs">px</span>
+            </div>
+          {/if}
+        </div>
       {/if}
+    </div>
+
+    <!-- Right group: stats + download -->
+    {#if active}
+      <div class="flex shrink-0 items-center gap-[14px]">
+        {#if active.status === 'working'}
+          <span class="inline-flex items-center gap-[8px] text-[12px] text-[var(--fg-dim)]">
+            <span
+              class="h-[12px] w-[12px] animate-spin rounded-full border-[1.5px] border-[var(--fg-ghost)] border-t-[var(--mint)]"
+            ></span>
+            {active.phase === 'decoding' ? 'decoding…' : 'compressing…'}
+          </span>
+        {:else if active.status === 'error'}
+          <span class="text-[12px] font-medium text-[var(--bad)]"
+            >{active.errorCode ?? 'error'}</span
+          >
+        {:else if active.status === 'done' && active.result}
+          {@const r = active.result}
+          <div class="flex items-center gap-[9px] text-[12px] tabular-nums">
+            <div class="flex flex-col items-end leading-tight">
+              <span class="label-xs">Original</span>
+              <span class="font-medium text-[var(--fg)]">{fmtBytes(r.bytesIn)}</span>
+            </div>
+            <span class="text-[var(--fg-faint)]">→</span>
+            <div class="flex flex-col items-end leading-tight">
+              <span class="label-xs">Output</span>
+              <span class="font-medium text-[var(--fg)]">{fmtBytes(r.bytesOut)}</span>
+            </div>
+            <Badge
+              variant={r.ratio > 1 ? 'warning' : 'default'}
+              class="savings ml-1"
+              data-testid="savings"
+            >
+              {fmtSavings(r.ratio)}
+            </Badge>
+          </div>
+          <Button variant="primary" onclick={download} class="h-[34px]">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Download
+          </Button>
+        {/if}
+      </div>
     {/if}
   </div>
 </div>

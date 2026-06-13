@@ -31,19 +31,27 @@
     {disabled}
     {onCheckedChange}
     class={cn(
-      'relative inline-flex h-[14px] w-[26px] shrink-0 items-center rounded-full border border-[var(--line-strong)] transition-colors duration-150',
-      checked ? 'bg-[var(--mint)] border-[var(--mint)]' : 'bg-[var(--fg-ghost)]',
+      'relative inline-flex h-[16px] w-[28px] shrink-0 items-center rounded-full border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mint)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-2)]',
+      checked
+        ? 'bg-[var(--mint)] border-[var(--mint)] shadow-[0_0_10px_-2px_var(--mint-glow)]'
+        : 'bg-[var(--bg-3)] border-[var(--line-strong)]',
       disabled && 'pointer-events-none',
     )}
   >
     <SwitchPrimitive.Thumb
       class={cn(
-        'pointer-events-none block h-[10px] w-[10px] rounded-full shadow-sm transition-transform duration-150',
-        checked ? 'translate-x-[14px] bg-[var(--bg)]' : 'translate-x-[1px] bg-[var(--fg-dim)]',
+        'pointer-events-none block h-[11px] w-[11px] rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.4)] transition-transform duration-150 ease-[var(--ease)]',
+        checked ? 'translate-x-[14px] bg-[var(--bg)]' : 'translate-x-[2px] bg-[var(--fg-dim)]',
       )}
     />
   </SwitchPrimitive.Root>
   {#if label}
-    <span class={cn('text-[var(--fg)]', disabled && 'text-[var(--fg-faint)]')}>{label}</span>
+    <span
+      class={cn(
+        'text-[12px] tracking-[0.01em]',
+        checked ? 'text-[var(--fg)]' : 'text-[var(--fg-dim)]',
+        disabled && 'text-[var(--fg-faint)]',
+      )}>{label}</span
+    >
   {/if}
 </label>
