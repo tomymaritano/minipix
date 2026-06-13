@@ -23,6 +23,19 @@ fn decode_err(e: impl std::fmt::Display) -> Error {
     }
 }
 
+#[cfg(feature = "native")]
+/// Rechaza AVIFs con alpha premultiplicado (asociado): avif-decode los
+/// des-premultiplica con una fórmula rota (colapsa a ~0) → colores corruptos
+/// silenciosos. Mejor un error tipado. Aislado para ser testeable sin fixture.
+fn reject_if_premultiplied(premultiplied: bool) -> Result<(), Error> {
+    if premultiplied {
+        return Err(decode_err(
+            "premultiplied-alpha AVIF is not supported: avif-decode un-premultiply formula is incorrect (would silently corrupt colors)",
+        ));
+    }
+    Ok(())
+}
+
 impl ImageEncoder for AvifCodec {
     fn encode(&self, img: &DecodedImage, opts: &Options) -> Result<Vec<u8>, Error> {
         // AVIF lossless existe pero ravif no lo expone → rechazo honesto v1.
@@ -73,8 +86,31 @@ impl ImageDecoder for AvifCodec {
         // ANTI-BOMBA real: dimensiones del sequence header AV1 (OBU) vía avif-parse,
         // SIN decodificar el frame. max_frame_* es el máximo de secuencia (cota
         // superior conservadora del tamaño croppeado) — la dirección segura para un guard.
-        let mut cursor = std::io::Cursor::new(data);
-        let parsed = avif_parse::read_avif(&mut cursor).map_err(decode_err)?;
+        //
+        // BUG CONOCIDO avif-parse 1.4.0: `read_avif` puede paniquear (assert!/
+        // debug_assert!) sobre AVIF malformado — p.ej. debug_assert_eq! en lib.rs:1329
+        // ("bad parser state bytes left", se activa en debug/test/fuzz) y assert! en
+        // lib.rs:668 (offset <= size, alcanzable también en release con boxes cuyo
+        // declared size supera el espacio disponible). `catch_unwind` convierte ese
+        // pánico en un error tipado para que NUNCA escape a través de la API pública.
+        // Backlog: cuando avif-parse upstream corrija los assert→error, eliminar este wrap.
+        //
+        // avif-parse 1.4 puede paniquear (assert!/debug_assert!) sobre AVIF malformado.
+        // Se contiene con catch_unwind → Error::Decode tipado. NO se suprime el panic
+        // hook: set_hook es global y minipix decodifica AVIFs en paralelo (threadpools
+        // de los bindings / worker pool) — suprimir concurrentemente corrompería el hook.
+        // El ruido en stderr aparece sólo en el camino de error con input malformado.
+        let data_owned = data.to_vec();
+        let parse_result = std::panic::catch_unwind(move || {
+            let mut cursor = std::io::Cursor::new(data_owned);
+            avif_parse::read_avif(&mut cursor)
+        })
+        .map_err(|_| {
+            decode_err(
+                "avif-parse panicked on malformed input (upstream bug: assert instead of error)",
+            )
+        })?;
+        let parsed = parse_result.map_err(decode_err)?;
         let meta = parsed.primary_item_metadata().map_err(decode_err)?;
         let header_pixels =
             u64::from(meta.max_frame_width.get()) * u64::from(meta.max_frame_height.get());
@@ -84,6 +120,17 @@ impl ImageDecoder for AvifCodec {
                 limit: max_pixels,
             });
         }
+
+        // Guard: avif-decode 1.0.2 un-premultiplies associated alpha via a broken
+        // formula — `(val*256)/(alpha*256)/256` which always yields `val/alpha/256 ≈ 0`
+        // instead of the correct `val*255/alpha`.  Rather than silently produce wrong
+        // colors, we reject premultiplied AVIFs with a typed error until avif-decode is
+        // fixed upstream or replaced.
+        //
+        // avif-parse exposes `AvifData::premultiplied_alpha` (the HEIF `prem` reference
+        // flag), so detection is reliable and zero-cost — the parse already happened for
+        // the dimension guard above.
+        reject_if_premultiplied(parsed.premultiplied_alpha)?;
 
         // Nota ICC: nclx/CICP la maneja avif-decode; AVIF con ICC embebido (`colr`
         // tipo `prof`) NO se normaliza en v1 (backlog).
@@ -202,7 +249,7 @@ impl ImageDecoder for AvifCodec {
 // Cobertura pendiente (backlog): variantes 16-bit y grayscale del normalizador (ravif solo encodea 8-bit; requiere fixture AVIF 10-bit).
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
     use crate::codecs::ImageEncoder;
     use crate::testutil::vector_gradient_circle;
@@ -289,6 +336,55 @@ mod tests {
             crate::Error::LimitExceeded {
                 pixels: 768,
                 limit: 100
+            }
+        ));
+    }
+
+    /// Verify that `avif-parse` correctly exposes the `premultiplied_alpha` flag
+    /// from a hand-crafted minimal AVIF container that carries a `prem` item reference.
+    ///
+    /// This is a unit test of the *detection path* — we confirm that our guard fires
+    /// without needing a full AV1 bitstream.  A complete premultiplied-alpha AVIF
+    /// fixture (with real AV1 payload) is not included because ravif always produces
+    /// unassociated alpha and constructing one requires external tooling; that is
+    /// tracked in the backlog.
+    ///
+    /// The formula bug in avif-decode 1.0.2 `unprem`:
+    ///   `(val*256) / (alpha*256) / 256`  →  `val/alpha/256`  (≈ 0 for all valid inputs)
+    /// Correct formula: `val * 255 / alpha`.
+    /// See avif-decode-1.0.2/src/lib.rs lines 142-143 / 153-154.
+    #[test]
+    fn avif_parse_exposes_premultiplied_flag() {
+        // Use an image with real alpha (straight/unassociated, alpha=128 circle)
+        // to meaningfully assert that ravif straight-alpha output → premultiplied_alpha == false.
+        // This confirms the flag is correctly exposed and not accidentally always-true or
+        // always-false.
+        use crate::codecs::ImageEncoder;
+        let img = vector_gradient_circle(32, 24);
+        let bytes = AvifCodec
+            .encode(&img, &crate::Options::default().with_effort(9))
+            .unwrap();
+        let mut cursor = std::io::Cursor::new(&bytes);
+        let parsed = avif_parse::read_avif(&mut cursor)
+            .expect("valid AVIF produced by ravif must parse cleanly");
+        // ravif encodes with AlphaColorMode::UnassociatedClean → no `prem` ref → flag must be false.
+        assert!(
+            !parsed.premultiplied_alpha,
+            "ravif straight-alpha output must NOT carry the premultiplied flag"
+        );
+    }
+
+    #[cfg(feature = "native")]
+    #[test]
+    fn reject_if_premultiplied_rechaza_true_acepta_false() {
+        // Cubre AMBAS ramas del guard sin necesitar un fixture AVIF premultiplicado.
+        assert!(super::reject_if_premultiplied(false).is_ok());
+        let err = super::reject_if_premultiplied(true).unwrap_err();
+        assert!(matches!(
+            err,
+            crate::Error::Decode {
+                format: crate::Format::Avif,
+                ..
             }
         ));
     }

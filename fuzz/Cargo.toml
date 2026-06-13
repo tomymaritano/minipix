@@ -1,0 +1,32 @@
+[package]
+name = "minipix-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Propio workspace (aislado) para que `cargo build/test/clippy --workspace`
+# en la raíz lo ignore — cargo-fuzz requiere nightly y libFuzzer no corre en
+# Windows MSVC. Ver README/CLAUDE.md para instrucciones de uso en Linux/macOS.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.minipix-core]
+path = "../crates/core"
+
+# El perfil de fuzz necesita debug-assertions para detectar panics en modo release.
+[profile.release]
+debug = true
+debug-assertions = true
+
+[[bin]]
+name = "sniff"
+path = "fuzz_targets/sniff.rs"
+
+[[bin]]
+name = "compress"
+path = "fuzz_targets/compress.rs"

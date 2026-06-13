@@ -52,3 +52,5 @@ Cero warnings en `main`. Un warning nuevo es un fallo de CI, no una advertencia.
 - Todo cambio en `crates/core/src/codecs/` corre la suite de conformance contra los vectores de `tests/vectors/`.
 - Los benchmarks (criterion) no bloquean CI pero acompañan cualquier PR que afirme una mejora de rendimiento.
 - Goldens: regenerar nativos con `MINIPIX_REGEN_GOLDENS=1 cargo test -p minipix-core --test conformance`; los wasm (webp lossless) con `crates/wasm/build-node-test.ps1` + `MINIPIX_REGEN_WASM_GOLDENS=1 node crates/wasm/tests/smoke.mjs`. Ambos cambios se justifican en el PR.
+- Robustez estable (todas las plataformas): `cargo test -p minipix-core --test robustness` — PRNG determinista, sin dependencias extra; corre en Windows/Linux/macOS en CI estable.
+- Fuzzing: `cargo +nightly fuzz run <target>` desde `fuzz/` (Linux/macOS; cargo-fuzz/libFuzzer no corre en Windows MSVC). El job CI semanal está en `.github/workflows/fuzz.yml`. Targets: `sniff`, `compress`.

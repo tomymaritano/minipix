@@ -137,4 +137,77 @@ mod tests {
     fn avif_siempre_none() {
         assert_eq!(peek_dimensions(Format::Avif, &[0u8; 64]), None);
     }
+
+    // ── Robustez: peek_dimensions nunca panica sobre input aleatorio ──────────
+    // SplitMix64 inline — sin dependencias externas, determinista.
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        fn byte(&mut self) -> u8 {
+            (self.next() & 0xFF) as u8
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        fn range(&mut self, n: usize) -> usize {
+            if n == 0 {
+                return 0;
+            }
+            (self.next() % n as u64) as usize
+        }
+    }
+
+    /// `peek_dimensions` nunca panica sobre bytes aleatorios para los 4 formatos.
+    /// La función es `pub(crate)` → se cubre aquí dentro del módulo, no desde `tests/`.
+    #[test]
+    fn peek_dimensions_nunca_panica_sobre_input_aleatorio() {
+        let mut rng = Rng(0xABCD_1234_5678_EF00);
+        let formats = [Format::Png, Format::Jpeg, Format::WebP, Format::Avif];
+
+        for _ in 0..3000 {
+            let len = rng.range(256);
+            let buf: Vec<u8> = (0..len).map(|_| rng.byte()).collect();
+            for &fmt in &formats {
+                // La única aserción es que no panica; el valor de retorno es irrelevante.
+                let _ = peek_dimensions(fmt, &buf);
+            }
+        }
+
+        // Buffers cortos (0-15 bytes) — cubren todos los guards de longitud mínima.
+        for len in 0usize..16 {
+            let buf: Vec<u8> = (0..len).map(|_| rng.byte()).collect();
+            for &fmt in &formats {
+                let _ = peek_dimensions(fmt, &buf);
+            }
+        }
+    }
+
+    /// Entradas diseñadas para tensar las ramas de longitud en cada parser.
+    #[test]
+    fn peek_dimensions_longitudes_boundary_nunca_paniquan() {
+        // PNG: exactamente 23 bytes (un byte menos que el mínimo de 24).
+        let short_png = vec![
+            0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, // chunk length
+            b'I', b'H', b'D', b'R', // chunk type
+            0, 0, 0, 1, // width
+            0, 0, 0, // altura incompleta (23 bytes total)
+        ];
+        assert_eq!(peek_dimensions(Format::Png, &short_png), None);
+
+        // WebP: exactamente 29 bytes (un byte menos que el mínimo de 30).
+        let short_webp = vec![
+            b'R', b'I', b'F', b'F', 25, 0, 0, 0, b'W', b'E', b'B', b'P', b'V', b'P', b'8', b'X', 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 29 bytes
+        ];
+        assert_eq!(peek_dimensions(Format::WebP, &short_webp), None);
+
+        // JPEG: buffer de 9 bytes (justo en el límite del bucle `i + 9 < data.len()`).
+        let short_jpeg = vec![0xFF, 0xD8, 0xFF, 0xC0, 0, 11, 0, 0, 1];
+        assert_eq!(peek_dimensions(Format::Jpeg, &short_jpeg), None);
+    }
 }
