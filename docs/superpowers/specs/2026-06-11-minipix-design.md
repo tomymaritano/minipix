@@ -195,7 +195,7 @@ En Rust estable con `panic=abort`, no hay `catch_unwind` disponible — un páni
 ### 7.5 Artefacto y hosting
 
 - **Tamaño**: 1.46 MB raw / ~0.62 MB gzip (perfil `wasm-release` + `wasm-opt -Oz`).
-- **Hosting**: Cloudflare Pages. GitHub Pages descartado (no permite headers custom). Los headers COOP/COEP están preparados en `playground/public/_headers` para cuando M3 habilite threads wasm — hoy son no-ops ya que no se usa SharedArrayBuffer.
+- **Hosting**: Cloudflare Pages. GitHub Pages descartado (no permite headers custom — relevante si M3 habilita threads). M2 NO incluye `_headers`: no se usa SharedArrayBuffer; cuando M3 habilite threads wasm son 2 líneas de COOP/COEP en Pages.
 - **Deploy**: automático vía `wrangler-action@v4` en cada push a `master` que toque `playground/`, `crates/wasm/`, `crates/core/`, o el workflow de deploy.
 
 **Funcionalidad**:
@@ -236,7 +236,7 @@ En Rust estable con `panic=abort`, no hay `catch_unwind` disponible — un páni
 - **crates.io**: `cargo publish` del core; los usuarios de Rust compilan de fuente (norma del ecosistema). Documentar requisitos: cmake + nasm (mozjpeg), y meson solo si queda dav1d.
 - **Release**: un tag → publica a los tres registros con la misma versión.
 - Toolchain de CI para deps C: nasm (mozjpeg), cmake (libwebp), meson (solo si la contingencia dav1d se activa).
-- **M2**: job WASM (emscripten + wasm-bindgen) que compila `crates/wasm`, build del playground (Vite) y deploy automático a Cloudflare Pages con `_headers` COOP/COEP.
+- **M2**: jobs WASM (cargo wasm-release + wasm-bindgen + wasm-opt, perfil puro-Rust — sin emscripten) que compilan `crates/wasm`, smoke Node, E2E Playwright y deploy del playground a Cloudflare Pages (sin `_headers`; ver §7.5).
 
 ## 11. Riesgos y mitigaciones
 
