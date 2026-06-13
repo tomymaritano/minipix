@@ -30,10 +30,10 @@ pub(crate) fn apply_profile_to_srgb(rgba: &mut [u8], profile: &ColorProfile) -> 
         )
         .map_err(|e| Error::IccTransform(e.to_string()))?;
 
-    // Short-circuit: si el transform es identidad (perfil ya sRGB o equivalente),
-    // saltear la transformación completa — los píxeles ya están en sRGB.
-    // Esto evita 2 copias O(n) + el transform per-píxel completo.
-    if transform_is_identity(&transform) {
+    // Short-circuit: sólo si el perfil es matrix-shaper puro (sin LUTs A2B/B2A),
+    // la matriz combinada RGB→XYZ→RGB es ≈identidad (1e-4), Y la rampa de grises
+    // es byte-exacta. Cualquier duda → transformación completa.
+    if transform_is_identity(profile, &dst_profile, &transform) {
         return Ok(());
     }
 
@@ -46,34 +46,76 @@ pub(crate) fn apply_profile_to_srgb(rgba: &mut [u8], profile: &ColorProfile) -> 
     Ok(())
 }
 
-/// Devuelve `true` si el transform deja sin cambios (±1 LSB) un conjunto de
-/// colores de prueba que cubren los extremos de cada canal y grises.
+/// 16 grises uniformemente espaciados para la rampa TRC (0..=255, paso ~17).
+/// Precalculados como literal para evitar cast u16→u8 bajo `-D warnings`.
+const GRAY_RAMP_STEPS: [u8; 16] = [
+    0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255,
+];
+
+/// Devuelve `true` sólo si el transform es byte-exactamente identidad en todo el dominio,
+/// verificado mediante tres comprobaciones estructurales encadenadas:
 ///
-/// Para un transform matrix-shaper RGB→sRGB, identidad en estos probes implica
-/// identidad en todo el dominio (una matriz 3×3 queda determinada por su acción
-/// sobre los 3 primarios). Conservador: ante cualquier desviación >1 devuelve
-/// `false` y se realiza la transformación real — nunca se salta un transform válido.
-fn transform_is_identity(transform: &Arc<Transform8BitExecutor>) -> bool {
-    const PROBES: [[u8; 4]; 12] = [
-        [0, 0, 0, 255],
-        [255, 255, 255, 255],
-        [255, 0, 0, 255],
-        [0, 255, 0, 255],
-        [0, 0, 255, 255],
-        [64, 64, 64, 255],
-        [128, 128, 128, 255],
-        [192, 192, 192, 255],
-        [255, 128, 0, 255],
-        [0, 128, 255, 255],
-        [128, 0, 255, 255],
-        [33, 177, 99, 128],
-    ];
-    let src: Vec<u8> = PROBES.iter().flatten().copied().collect();
-    let mut dst = vec![0u8; src.len()];
-    if transform.transform(&src, &mut dst).is_err() {
+/// 1. **Matrix-shaper sin LUTs**: el perfil origen es matrix-shaper puro (TRC + matriz de
+///    colorantes; `is_matrix_shaper()` verdadero) y no contiene etiquetas cLUT A2B ni B2A.
+///    Un perfil LUT puede tener su matriz-identidad y aun así un cLUT entre nodos con
+///    corrección de color no trivial.
+///
+/// 2. **Matriz ≈ identidad (1e-4)**: `transform_matrix(dst)` (la matriz combinada
+///    RGB→XYZ→RGB incluyendo adaptación cromática) tiene todos sus elementos diagonales
+///    dentro de 1e-4 de 1.0 y todos los fuera-de-diagonal dentro de 1e-4 de 0.0.
+///
+/// 3. **Rampa de grises byte-exacta**: 16 grises uniformes transformados vuelven sin
+///    cambios (diferencia = 0 en todos los canales RGB). Esto detecta desviaciones de TRC
+///    que la comprobación de matriz no cubre (e.g., gamma ligeramente diferente).
+///
+/// El check es conservador: ante cualquier fallo devuelve `false` y se aplica la
+/// transformación completa. Nunca se salta un transform necesario.
+fn transform_is_identity(
+    profile: &ColorProfile,
+    dst: &ColorProfile,
+    transform: &Arc<Transform8BitExecutor>,
+) -> bool {
+    // 1. Matrix-shaper sin LUTs cLUT (A2B ni B2A).
+    if !profile.is_matrix_shaper() {
+        return false;
+    }
+    let has_lut = profile.lut_a_to_b_perceptual.is_some()
+        || profile.lut_a_to_b_colorimetric.is_some()
+        || profile.lut_a_to_b_saturation.is_some()
+        || profile.lut_b_to_a_perceptual.is_some()
+        || profile.lut_b_to_a_colorimetric.is_some()
+        || profile.lut_b_to_a_saturation.is_some();
+    if has_lut {
+        return false;
+    }
+
+    // 2. Matriz combinada ≈ identidad (tolerancia 1e-4).
+    let m = profile.transform_matrix(dst);
+    let near_one = |x: f64| (x - 1.0_f64).abs() < 1e-4_f64;
+    let near_zero = |x: f64| x.abs() < 1e-4_f64;
+    let identity_matrix = near_one(m.v[0][0])
+        && near_one(m.v[1][1])
+        && near_one(m.v[2][2])
+        && near_zero(m.v[0][1])
+        && near_zero(m.v[0][2])
+        && near_zero(m.v[1][0])
+        && near_zero(m.v[1][2])
+        && near_zero(m.v[2][0])
+        && near_zero(m.v[2][1]);
+    if !identity_matrix {
+        return false;
+    }
+
+    // 3. Rampa de grises byte-exacta: cubre desviaciones de TRC que la matriz no detecta.
+    let mut ramp: Vec<u8> = Vec::with_capacity(GRAY_RAMP_STEPS.len() * 4);
+    for v in GRAY_RAMP_STEPS {
+        ramp.extend_from_slice(&[v, v, v, 255]);
+    }
+    let mut out = vec![0u8; ramp.len()];
+    if transform.transform(&ramp, &mut out).is_err() {
         return false; // ante error, no saltear (camino seguro)
     }
-    src.iter().zip(&dst).all(|(a, b)| a.abs_diff(*b) <= 1)
+    ramp == out
 }
 
 /// Parsea un blob ICC crudo y aplica la conversión a sRGB sobre `rgba` (RGBA8).
@@ -200,5 +242,30 @@ mod tests {
         let orig = pixels.clone();
         apply_icc_to_srgb(&mut pixels, &srgb_bytes).unwrap();
         assert_eq!(pixels, orig, "sRGB debe ser short-circuit byte-exacto");
+    }
+
+    #[test]
+    fn srgb_perturbado_no_se_saltea() {
+        // Un perfil casi-sRGB con el colorante rojo perturbado (+0.002 en X) tiene una
+        // matriz combinada RGB→XYZ→RGB que se aleja >1e-4 de la identidad, por lo que
+        // el short-circuit NO debe dispararse — el transform debe aplicarse.
+        // Verificamos en [249, 10, 0, 255], donde la desviación es máxima.
+        let mut p = moxcms::ColorProfile::new_srgb();
+        // red_colorant.x es el componente X del colorante rojo (f64, unidades XYZ D50).
+        // Una perturbación de +0.002 da una desviación de ~0.003 en la diagonal de la
+        // matriz combinada — bien por encima del umbral 1e-4 → no short-circuit.
+        p.red_colorant.x += 0.002;
+        let perturbed_bytes = p.encode().expect("encode perturbed profile");
+
+        let mut px = vec![249u8, 10, 0, 255];
+        let orig = px.clone();
+        // Aplica vía blob (ejercita el camino completo incluido el parse).
+        apply_icc_to_srgb(&mut px, &perturbed_bytes).unwrap();
+        // El perfil perturbado NO es identidad — el transform debe cambiar al menos un canal.
+        assert_ne!(
+            &px[..3],
+            &orig[..3],
+            "perfil casi-sRGB perturbado debe transformarse, no saltearse"
+        );
     }
 }
