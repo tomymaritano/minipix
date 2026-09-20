@@ -58,10 +58,8 @@
       src={afterUrl}
       alt="Compressed"
       style:transform="scale({zoom})"
-      style="transition: transform 0.22s var(--ease); image-rendering: {zoom > 1
-        ? 'pixelated'
-        : 'auto'};"
-      class="max-h-full max-w-full origin-center"
+      style="image-rendering: {zoom > 1 ? 'pixelated' : 'auto'};"
+      class="max-h-full max-w-full origin-center transition-transform duration-[220ms] ease-[var(--ease)]"
       draggable="false"
     />
   </div>
@@ -75,26 +73,21 @@
       src={beforeUrl}
       alt="Original"
       style:transform="scale({zoom})"
-      style="transition: transform 0.22s var(--ease); image-rendering: {zoom > 1
-        ? 'pixelated'
-        : 'auto'};"
-      class="max-h-full max-w-full origin-center"
+      style="image-rendering: {zoom > 1 ? 'pixelated' : 'auto'};"
+      class="max-h-full max-w-full origin-center transition-transform duration-[220ms] ease-[var(--ease)]"
       draggable="false"
     />
   </div>
 
   <!-- Labels -->
   <span
-    class="pointer-events-none absolute left-4 top-4 z-[4] rounded-[6px] border border-[var(--line)] bg-[var(--bg-2)]/80 px-[8px] py-[4px] text-[10px] uppercase tracking-[0.14em] text-[var(--fg-dim)] backdrop-blur-md"
+    class="pointer-events-none absolute left-4 top-4 z-[4] rounded-md border border-border bg-card/80 px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground"
     >Original</span
   >
   <span
-    class="pointer-events-none absolute right-4 top-4 z-[4] inline-flex items-center gap-[5px] rounded-[6px] border border-[rgba(52,211,153,0.25)] bg-[rgba(52,211,153,0.1)] px-[8px] py-[4px] text-[10px] uppercase tracking-[0.14em] text-[var(--mint)] backdrop-blur-md"
+    class="pointer-events-none absolute right-4 top-4 z-[4] rounded-md border border-primary/25 bg-primary/10 px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-primary"
+    >minipix</span
   >
-    <span class="h-[5px] w-[5px] rounded-full bg-[var(--mint)] shadow-[0_0_6px_var(--mint-glow)]"
-    ></span>
-    minipix
-  </span>
 
   <!-- Divider -->
   <div
@@ -102,32 +95,11 @@
     style:left="{pos}%"
     style="transform: translateX(-0.5px);"
   >
-    <!-- Line -->
+    <div class="absolute bottom-0 left-0 top-0 w-px bg-white/80"></div>
     <div
-      class="absolute bottom-0 left-0 top-0 w-px bg-white/80 shadow-[0_0_0_0.5px_rgba(0,0,0,0.35)]"
-    ></div>
-    <!-- Handle -->
-    <div
-      class="absolute left-0 top-1/2 grid h-[28px] min-w-[46px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-[rgba(52,211,153,0.5)] bg-[var(--bg-2)] px-[10px] shadow-[var(--shadow-md),0_0_0_1px_rgba(0,0,0,0.3)]"
+      class="absolute left-0 top-1/2 grid h-7 min-w-[46px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-md border border-primary/50 bg-card px-2.5 shadow-[var(--shadow-md)]"
     >
-      <span class="text-[11px] font-medium tabular-nums text-[var(--fg)]">{Math.round(pos)}%</span>
+      <span class="text-[11px] font-medium tabular-nums text-foreground">{Math.round(pos)}%</span>
     </div>
   </div>
 </div>
-
-<style>
-  .checker {
-    background-color: #0a0b0d;
-    background-image:
-      linear-gradient(45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
-      linear-gradient(-45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.035) 75%),
-      linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.035) 75%);
-    background-size: 20px 20px;
-    background-position:
-      0 0,
-      0 10px,
-      10px -10px,
-      -10px 0;
-  }
-</style>
