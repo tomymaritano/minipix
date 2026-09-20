@@ -15,7 +15,7 @@ async function settle(page: Page): Promise<void> {
 
 test('shot: empty state', async ({ page }) => {
   await page.goto('/');
-  await page.waitForTimeout(900); // dejar correr el reveal
+  await page.waitForTimeout(200);
   await page.screenshot({ path: join(SHOTS, 'empty.png') });
 });
 

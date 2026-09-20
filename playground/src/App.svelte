@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { ChevronLeft, ChevronRight, X } from '@lucide/svelte';
   import { playground } from './lib/state.svelte';
   import EmptyState from './lib/components/EmptyState.svelte';
   import Viewer from './lib/components/Viewer.svelte';
   import Toolbar from './lib/components/Toolbar.svelte';
+  import { Button } from '$lib/components/ui/button';
 
   const isMac =
     typeof navigator !== 'undefined' && /mac/i.test(navigator.platform || navigator.userAgent);
@@ -96,59 +98,76 @@
   tabindex="-1"
 />
 
-<!-- Brand mark -->
-<header
-  class="absolute top-[20px] left-[24px] z-30 inline-flex select-none items-center gap-[8px] text-[13px] tracking-tight"
->
-  <span
-    class="grid h-[20px] w-[20px] place-items-center rounded-[6px] border border-[rgba(52,211,153,0.3)] bg-[rgba(52,211,153,0.1)] text-[9px] text-[var(--mint)] shadow-[0_0_12px_-4px_var(--mint-glow)]"
-    >◆</span
-  >
-  <span class="font-medium text-[var(--fg)]">minipix</span>
-  <span class="hidden text-[10px] tracking-[0.04em] text-[var(--fg-faint)] sm:inline"
-    >/ playground</span
-  >
-</header>
-
-{#if playground.active}
-  <Viewer job={playground.active} />
-{:else}
-  <EmptyState {openPicker} {isMac} />
-{/if}
-
-<Toolbar active={playground.active} />
-
-{#if dragOver}
-  <div
-    class="drop-overlay fixed inset-[10px] z-[70] grid place-items-center rounded-[14px] border-2 border-dashed border-[var(--mint)] backdrop-blur-md"
-    style="background: radial-gradient(60% 50% at 50% 50%, rgba(52,211,153,0.12), rgba(0,0,0,0.66) 75%);"
-  >
-    <div class="flex flex-col items-center gap-[14px]">
-      <div
-        class="grid h-[60px] w-[60px] place-items-center rounded-[18px] border border-[rgba(52,211,153,0.4)] bg-[rgba(52,211,153,0.12)] shadow-[0_0_40px_-8px_var(--mint-glow)]"
-      >
-        <svg
-          width="28"
-          height="28"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="var(--mint)"
-          stroke-width="1.4"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
-      </div>
-      <span class="text-[16px] font-medium tracking-[0.01em] text-[var(--mint)]"
-        >Drop to compress</span
+<div class="relative z-[2] flex h-full flex-col p-2">
+  <header class="relative flex h-12 shrink-0 items-center px-3">
+    <div class="flex select-none items-center gap-2 text-[13px] tracking-tight">
+      <span class="font-medium text-foreground">minipix</span>
+      <span class="hidden text-[10px] tracking-[0.04em] text-muted-foreground sm:inline"
+        >/ playground</span
       >
     </div>
+
+    {#if playground.position && playground.position.total > 1}
+      <div
+        class="absolute left-1/2 inline-flex -translate-x-1/2 items-center gap-2.5 text-[12px] tabular-nums text-muted-foreground"
+      >
+        <Button
+          variant="icon"
+          size="sm"
+          class="h-6 w-6 rounded-full px-0"
+          onclick={() => playground.step(-1)}
+          aria-label="Previous image"
+        >
+          <ChevronLeft size={16} />
+        </Button>
+        <span class="min-w-[42px] text-center font-medium text-foreground">
+          {playground.position.index}
+          <span class="text-muted-foreground">/</span>
+          {playground.position.total}
+        </span>
+        <Button
+          variant="icon"
+          size="sm"
+          class="h-6 w-6 rounded-full px-0"
+          onclick={() => playground.step(1)}
+          aria-label="Next image"
+        >
+          <ChevronRight size={16} />
+        </Button>
+      </div>
+    {/if}
+
+    {#if playground.active}
+      <Button
+        variant="icon"
+        size="icon"
+        class="ml-auto"
+        onclick={() => playground.removeActive()}
+        aria-label="Close"
+      >
+        <X size={15} />
+      </Button>
+    {/if}
+  </header>
+
+  <div class="relative min-h-0 flex-1">
+    {#if playground.active}
+      <Viewer job={playground.active} />
+    {:else}
+      <EmptyState {openPicker} {isMac} />
+    {/if}
+
+    {#if dragOver}
+      <div
+        class="drop-overlay pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-xl border-2 border-dashed border-primary bg-background/70"
+      >
+        <span class="text-[16px] font-medium tracking-[0.01em] text-primary">Drop to compress</span>
+      </div>
+    {/if}
   </div>
-{/if}
+
+  <Toolbar active={playground.active} />
+</div>
 
 <style>
   @keyframes pop {
