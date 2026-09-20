@@ -27,5 +27,5 @@
   "include": ["src/**/*.ts", "src/**/*.js", "src/**/*.svelte"],
   // El .d.ts del wasm queda VISIBLE (lo necesitan tsc/eslint para tipar los
   // imports del worker); solo se excluye el glue .js generado y el binario.
-  "exclude": ["src/lib/wasm/**/*.js", "src/lib/wasm/**/*.wasm"]
+  "exclude": ["src/lib/wasm/**/*.js", "src/lib/wasm/**/*.wasm", "src/**/*.test.ts"]
 }

@@ -11,7 +11,7 @@
 
 <div
   class={cn(
-    'rounded-[var(--radius)] border border-[var(--line)] bg-[var(--bg-2)] text-[var(--fg)] shadow-[var(--shadow-md)]',
+    'rounded-xl border border-border bg-card text-foreground shadow-[var(--shadow-md)]',
     className,
   )}
   {...rest}

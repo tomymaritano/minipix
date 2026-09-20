@@ -10,12 +10,12 @@
   const { variant = 'default', class: className, children, ...rest }: Props = $props();
 
   const base =
-    'inline-flex items-center justify-center font-semibold tabular-nums text-[11px] leading-none rounded-full border px-[8px] py-[3px] transition-colors duration-150';
+    'inline-flex items-center justify-center font-semibold tabular-nums text-[11px] leading-none rounded-full border px-2 py-0.5 transition-colors duration-150';
 
   const variants: Record<string, string> = {
-    default: 'text-[var(--mint)] bg-[var(--mint-dim)] border-[rgba(52,211,153,0.28)]',
-    warning: 'text-[var(--warn)] bg-[var(--warn-dim)] border-[rgba(245,181,68,0.28)]',
-    outline: 'text-[var(--fg-dim)] bg-transparent border-[var(--line)]',
+    default: 'text-primary bg-primary/16 border-primary/30',
+    warning: 'text-warning bg-warning/16 border-warning/30',
+    outline: 'text-muted-foreground bg-transparent border-border',
   };
 </script>
 

@@ -27,3 +27,7 @@ playground/src/lib/wasm/
 # IDE / SO
 .DS_Store
 Thumbs.db
+
+# Isolated worktrees and SDD scratch
+.worktrees/
+.superpowers/

@@ -91,3 +91,17 @@ test('el botón Download entrega un archivo con la extensión correcta', async (
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/gradient_circle\.png$/);
 });
+
+test('zoom segmented is pressed at 1× then 2×', async ({ page }) => {
+  await page.goto('/');
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles(join(ROOT, 'tests/vectors/gradient_circle.png'));
+  await expect(page.locator('img[alt="Compressed"]')).toBeVisible({ timeout: 120_000 });
+  const z1 = page.getByRole('button', { name: '1×' });
+  const z2 = page.getByRole('button', { name: '2×' });
+  await expect(z1).toHaveAttribute('aria-pressed', 'true');
+  await z2.click();
+  await expect(z2).toHaveAttribute('aria-pressed', 'true');
+  await expect(z1).toHaveAttribute('aria-pressed', 'false');
+});
