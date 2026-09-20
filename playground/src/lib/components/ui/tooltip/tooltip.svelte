@@ -34,7 +34,7 @@
         {side}
         {sideOffset}
         class={cn(
-          'z-[80] rounded-[6px] border border-[var(--line)] bg-[var(--bg-3)] px-2 py-1 text-[11px] font-medium text-[var(--fg)] shadow-[var(--shadow-lg)] tt-content',
+          'z-[80] rounded-md border border-border bg-secondary px-2 py-1 text-[11px] font-medium text-foreground shadow-[var(--shadow-lg)] tt-content',
           className,
         )}
       >
