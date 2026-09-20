@@ -14,6 +14,7 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="group relative flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card px-10 py-10 text-center hover:border-primary/55"
     onclick={openPicker}
@@ -30,7 +31,9 @@
       <Layers size={40} class="text-primary" />
     </div>
 
-    <h1 class="text-[18px] font-medium leading-[1.1] tracking-[-0.02em] text-foreground lg:text-[28px]">
+    <h1
+      class="text-[18px] font-medium leading-[1.1] tracking-[-0.02em] text-foreground lg:text-[28px]"
+    >
       Compress images, privately
     </h1>
     <p class="mt-3 max-w-[400px] text-[13px] leading-relaxed text-muted-foreground">
@@ -64,9 +67,7 @@
       {/each}
     </div>
 
-    <p
-      class="absolute bottom-4 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"
-    >
+    <p class="absolute bottom-4 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
       <span class="kbd">{mod}V</span>
       <span>to paste from clipboard</span>
     </p>

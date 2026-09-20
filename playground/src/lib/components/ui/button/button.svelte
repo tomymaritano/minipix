@@ -20,8 +20,7 @@
     'relative inline-flex items-center justify-center font-medium select-none transition-[transform,background-color,border-color,box-shadow,color] duration-150 ease-[var(--ease)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none cursor-pointer';
 
   const variants: Record<string, string> = {
-    default:
-      'bg-secondary text-foreground border border-border hover:border-foreground/20',
+    default: 'bg-secondary text-foreground border border-border hover:border-foreground/20',
     primary: 'bg-primary text-primary-foreground hover:brightness-110',
     ghost: 'bg-transparent text-muted-foreground hover:text-foreground hover:bg-white/[0.06]',
     secondary: 'bg-secondary text-foreground border border-border hover:border-foreground/20',

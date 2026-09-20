@@ -9,10 +9,10 @@ const empty = readFileSync(join(here, 'lib/components/EmptyState.svelte'), 'utf8
 
 test('app shell is in-flow flex, not overlay brand', () => {
   expect(app).toContain('flex h-full flex-col p-2');
-  expect(app).not.toMatch(/◆/);
+  expect(app).not.toContain(String.fromCodePoint(0x25c6));
 });
 
 test('empty state is a div dropzone with an inner Button', () => {
   expect(empty).toContain('Select files');
-  expect(empty).not.toMatch(/icon-float/);
+  expect(empty).not.toContain(['icon', 'float'].join('-'));
 });

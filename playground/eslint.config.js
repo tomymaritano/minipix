@@ -45,7 +45,14 @@ const config = [
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'src/lib/wasm/**', 'src/lib/components/ui/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'src/lib/wasm/**',
+      'src/lib/components/ui/**',
+      // Vitest file-content contracts import node:*; excluded from tsconfig.app.json.
+      'src/**/*.test.ts',
+    ],
   },
 ];
 

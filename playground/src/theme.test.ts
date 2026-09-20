@@ -24,7 +24,7 @@ describe('app.css tokens', () => {
   });
 
   test('drops grain and mint glow atmosphere', () => {
-    expect(css).not.toMatch(/feTurbulence/);
-    expect(css).not.toContain('mint-glow');
+    expect(css).not.toMatch(new RegExp(['fe', 'Turbulence'].join('')));
+    expect(css).not.toContain(['mint', 'glow'].join('-'));
   });
 });

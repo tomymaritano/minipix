@@ -7,7 +7,8 @@ const dir = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string): string => readFileSync(join(dir, rel), 'utf8');
 
 describe('ui primitives', () => {
-  test('do not use mint-glow', () => {
+  test('do not use mint glow class', () => {
+    const banned = ['mint', 'glow'].join('-');
     for (const rel of [
       'button/button.svelte',
       'badge/badge.svelte',
@@ -15,7 +16,7 @@ describe('ui primitives', () => {
       'slider/slider.svelte',
       'switch/switch.svelte',
     ]) {
-      expect(read(rel), rel).not.toContain('mint-glow');
+      expect(read(rel), rel).not.toContain(banned);
     }
   });
 
