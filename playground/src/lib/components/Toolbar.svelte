@@ -8,6 +8,7 @@
   import { Switch } from '$lib/components/ui/switch';
   import { Badge } from '$lib/components/ui/badge';
   import { Separator } from '$lib/components/ui/separator';
+  import { Download, LoaderCircle } from '@lucide/svelte';
 
   interface Props {
     active: Job | null;
@@ -69,15 +70,11 @@
   const formatItems = FORMATS.map((f) => ({ value: f, label: FORMAT_LABEL[f] }));
 </script>
 
-<div
-  class="toolbar fixed inset-x-0 bottom-0 z-40 border-t border-[var(--line)]"
-  style="background: linear-gradient(to top, var(--bg-1) 60%, rgba(16,18,22,0.78)); backdrop-filter: blur(14px) saturate(1.2); box-shadow: var(--shadow-panel);"
->
+<div class="toolbar shrink-0 border-t border-border bg-card">
   <div
-    class="mx-auto flex w-full max-w-[1520px] flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-3 lg:px-7"
-    style="min-height: var(--bar-h);"
+    class="mx-auto flex w-full min-h-[56px] max-w-[1520px] flex-col gap-3 px-5 py-3 max-[899px]:flex-col min-[900px]:flex-row min-[900px]:flex-wrap min-[900px]:items-center min-[900px]:justify-between lg:px-7"
   >
-    <!-- Left group: controls (stays one line; wraps the right group below when cramped) -->
+    <!-- Left group: controls -->
     <div class="flex flex-nowrap items-center gap-x-[13px]">
       <!-- Format select -->
       <div class="flex items-center gap-[10px]">
@@ -110,7 +107,7 @@
         />
         <span class="label-xs">Sharper</span>
         {#if qualityActive}
-          <span class="w-[26px] text-[11px] font-medium tabular-nums text-[var(--fg-dim)]"
+          <span class="w-[26px] text-[11px] tabular-nums text-muted-foreground"
             >{globalOptions.quality ?? 75}</span
           >
         {/if}
@@ -133,10 +130,10 @@
           <Switch checked={resizeOn} label="Resize" onCheckedChange={toggleResize} />
           {#if resizeOn}
             <div
-              class="inline-flex items-center gap-[5px] rounded-[7px] border border-[var(--line)] bg-[var(--bg-3)] pr-[8px] focus-within:border-[var(--mint)] focus-within:ring-2 focus-within:ring-[var(--mint-dim)]"
+              class="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-secondary pr-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30"
             >
               <input
-                class="w-[52px] bg-transparent px-[8px] py-[5px] text-[12px] tabular-nums text-[var(--fg)] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                class="w-[52px] bg-transparent px-2 py-1.5 text-[12px] tabular-nums text-foreground outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                 type="number"
                 min="16"
                 max="8192"
@@ -155,27 +152,24 @@
     {#if active}
       <div class="flex shrink-0 items-center gap-[14px]">
         {#if active.status === 'working'}
-          <span class="inline-flex items-center gap-[8px] text-[12px] text-[var(--fg-dim)]">
-            <span
-              class="h-[12px] w-[12px] animate-spin rounded-full border-[1.5px] border-[var(--fg-ghost)] border-t-[var(--mint)]"
-            ></span>
+          <span class="inline-flex items-center gap-2 text-[12px] text-muted-foreground">
+            <LoaderCircle size={12} class="animate-spin text-primary" />
             {active.phase === 'decoding' ? 'decoding…' : 'compressing…'}
           </span>
         {:else if active.status === 'error'}
-          <span class="text-[12px] font-medium text-[var(--bad)]"
-            >{active.errorCode ?? 'error'}</span
+          <span class="text-[12px] font-medium text-destructive">{active.errorCode ?? 'error'}</span
           >
         {:else if active.status === 'done' && active.result}
           {@const r = active.result}
           <div class="flex items-center gap-[9px] text-[12px] tabular-nums">
             <div class="flex flex-col items-end leading-tight">
               <span class="label-xs">Original</span>
-              <span class="font-medium text-[var(--fg)]">{fmtBytes(r.bytesIn)}</span>
+              <span class="font-medium text-foreground">{fmtBytes(r.bytesIn)}</span>
             </div>
-            <span class="text-[var(--fg-faint)]">→</span>
+            <span class="text-muted-foreground">→</span>
             <div class="flex flex-col items-end leading-tight">
               <span class="label-xs">Output</span>
-              <span class="font-medium text-[var(--fg)]">{fmtBytes(r.bytesOut)}</span>
+              <span class="font-medium text-foreground">{fmtBytes(r.bytesOut)}</span>
             </div>
             <Badge
               variant={r.ratio > 1 ? 'warning' : 'default'}
@@ -185,22 +179,8 @@
               {fmtSavings(r.ratio)}
             </Badge>
           </div>
-          <Button variant="primary" onclick={download} class="h-[34px]">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
+          <Button variant="primary" onclick={download}>
+            <Download size={14} />
             Download
           </Button>
         {/if}

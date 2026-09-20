@@ -43,9 +43,8 @@
   ];
 </script>
 
-<!-- Clears fixed toolbar (--bar-h); drop when Toolbar is in-flow -->
 <div
-  class="viewer flex h-[calc(100%-var(--bar-h))] min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card"
+  class="viewer flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card"
 >
   <div class="relative min-h-0 flex-1">
     {#if job.status === 'error'}
