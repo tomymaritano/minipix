@@ -31,3 +31,6 @@ Thumbs.db
 # Isolated worktrees and SDD scratch
 .worktrees/
 .superpowers/
+
+# Downloaded fixture for scripts/compare-bench.mjs (not a source asset)
+scripts/compare-bench/cache/

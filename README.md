@@ -1,8 +1,12 @@
 # minipix
 
-**minipix** is an image compression and conversion SDK supporting PNG, JPEG, WebP, and AVIF. A single Rust core (`minipix-core`) is published to npm, PyPI, and crates.io, giving JavaScript, Python, and Rust users the same API, the same encoding engine, and byte-identical output across all three languages — verified by SHA-256 conformance goldens in CI. The dependency tree is permissive-licensed (one documented MPL-2.0 file-level-copyleft exception, see [Codecs & licenses](#codecs--licenses)); compliance is enforced by `cargo-deny` in CI.
+**minipix** is an image compression and conversion SDK supporting PNG, JPEG, WebP, and AVIF. A single Rust core (`minipix-core`) targets npm, PyPI, and crates.io, giving JavaScript, Python, and Rust users the same API, the same encoding engine, and byte-identical output across all three languages — verified by SHA-256 conformance goldens in CI. The dependency tree is permissive-licensed (one documented MPL-2.0 file-level-copyleft exception, see [Codecs & licenses](#codecs--licenses)); compliance is enforced by `cargo-deny` in CI.
 
 > **Warning: Pre-release (v0.1.0, milestone M1).** APIs are stabilising. Breaking changes may occur before the stable tag.
+
+Compress or convert an image in an upload pipeline. The same call, and the same output bytes, in Node, Python, and Rust.
+
+The browser demo lives in [`playground/`](playground/). It runs entirely on the machine opening the page. It is not hosted yet.
 
 ---
 
@@ -56,6 +60,26 @@ println!("{} -> {} bytes", out.bytes_in, out.bytes_out);
 
 ---
 
+## Benchmark
+
+One photo, quality set to **75 on each library's own scale**. That number is not a visual match across encoders. Median of 3 runs after one warmup. PSNR is against Pillow's decode of the source (higher is closer to that decode, not a perceptual score).
+
+Source: [Collage of Nine Dogs](https://commons.wikimedia.org/wiki/File:Collage_of_Nine_Dogs.jpg), 1280×1125 JPEG, 542,691 bytes. Measured 2026-09-24 on an Apple M3 Pro. minipix 0.1.0 (release), sharp 0.34.4, Pillow 12.3.0. Reproduce with `node scripts/compare-bench.mjs`.
+
+| Format | minipix | sharp | Pillow |
+| --- | --- | --- | --- |
+| JPEG | 303,466 B · 146.1 ms · 29.5 dB | 303,446 B · 152.2 ms · 29.5 dB | 403,859 B · 31.7 ms · 30.7 dB |
+| WebP | 352,294 B · 118.6 ms · 33.6 dB | 352,578 B · 117.4 ms · 33.6 dB | 352,578 B · 118.3 ms · 33.6 dB |
+| AVIF | 297,286 B · 1140.4 ms · 34.4 dB | 457,785 B · 460.7 ms · 41.4 dB | 418,906 B · 145.3 ms · 38.5 dB |
+
+JPEG and WebP land next to sharp. Both JPEGs are mozjpeg, so the files match and both are smaller than Pillow, with a slightly lower PSNR. WebP is libwebp on all three, same size and same time.
+
+AVIF is not the same encoder. minipix uses rav1e on one thread (so the bytes do not depend on the core count). At quality 75 it comes out smaller, slower, and farther from the source than sharp or Pillow. Do not read that row as a win.
+
+Settings: minipix quality 75, effort 4 (JPEG ignores effort; progressive scan on; AVIF speed 6). sharp JPEG is mozjpeg, progressive, quality 75; WebP and AVIF use quality 75 and effort 4. Pillow JPEG is quality 75, progressive, optimize; WebP is quality 75, method 4; AVIF is quality 75 at Pillow's default speed.
+
+---
+
 ## Options
 
 | Option | JS/Python name | Rust field | Default | Description |
@@ -70,11 +94,12 @@ println!("{} -> {} bytes", out.bytes_in, out.bytes_out);
 
 ### Behavioral notes
 
+- **No resize, crop, or rotate.**
+- **EXIF orientation is not applied.** A phone photo that relies on the orientation tag can come out sideways. Metadata (EXIF, XMP) is always stripped. Embedded ICC profiles are **applied** during decode: output pixels are always in sRGB. Exception: AVIF images with an embedded ICC (`colr` box of type `prof`) are not colour-transformed in v1 (backlog; nclx/CICP is handled correctly).
 - **PNG lossy** uses palette quantisation (quantette, Floyd-Steinberg dithering) for opaque images. Images with any transparent pixel fall back to lossless RGBA8 automatically.
 - **JPEG** rejects `lossless: true` with `InvalidOptions`.
 - **AVIF** lossless is not supported in v1 and is rejected with `InvalidOptions`.
 - **Animated WebP** inputs are rejected with an explicit `Decode` error rather than silently flattening to the first frame.
-- Metadata is always stripped. Embedded ICC profiles are **applied** during decode: output pixels are always in sRGB. Exception: AVIF images with an embedded ICC (`colr` box of type `prof`) are not colour-transformed in v1 (backlog; nclx/CICP is handled correctly).
 
 ---
 

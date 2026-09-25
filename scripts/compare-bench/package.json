@@ -1,0 +1,9 @@
+{
+  "name": "minipix-compare-bench",
+  "private": true,
+  "type": "module",
+  "description": "Local size/time comparison of minipix against sharp and Pillow. Not published.",
+  "dependencies": {
+    "sharp": "0.34.4"
+  }
+}
